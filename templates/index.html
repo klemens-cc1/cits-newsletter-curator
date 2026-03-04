@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CITS Newsletter Curator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;500&family=Merriweather:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --red:      #ba0c2f;
+      --charcoal: #252525;
+      --mid:      #3a3a3a;
+      --gray:     #909090;
+      --light:    #efefef;
+      --white:    #ffffff;
+      --border:   #e0e0e0;
+      --selected: #fff8f8;
+      --maybe:    #fffbf0;
+      --skip:     #f5f5f5;
+    }
+
+    body {
+      font-family: 'Merriweather', Georgia, serif;
+      background: var(--light);
+      color: var(--charcoal);
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--charcoal);
+      padding: 0 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 64px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    .header-title {
+      font-family: 'Oswald', sans-serif;
+      font-size: 13px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--red);
+    }
+    .header-sub {
+      font-family: 'Merriweather', serif;
+      font-size: 15px;
+      color: var(--white);
+      font-weight: 300;
+    }
+    .header-divider {
+      width: 1px;
+      height: 28px;
+      background: #444;
+    }
+    .week-selector {
+      font-family: 'Oswald', sans-serif;
+      font-size: 12px;
+      letter-spacing: 1px;
+      background: var(--mid);
+      border: 1px solid #555;
+      color: var(--white);
+      padding: 6px 12px;
+      cursor: pointer;
+      outline: none;
+    }
+    .week-selector option { background: var(--charcoal); }
+
+    /* ── Stats bar ── */
+    .stats-bar {
+      background: var(--white);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 32px;
+      display: flex;
+      gap: 28px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .stat-item {
+      font-family: 'Oswald', sans-serif;
+      font-size: 12px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--gray);
+    }
+    .stat-item span {
+      color: var(--charcoal);
+      font-size: 16px;
+      font-weight: 500;
+      margin-left: 4px;
+    }
+    .stat-item.selected span { color: var(--red); }
+
+    /* ── Layout ── */
+    .layout {
+      display: flex;
+      height: calc(100vh - 64px - 45px);
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: 260px;
+      min-width: 260px;
+      background: var(--white);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 20px 0;
+    }
+    .sidebar-section {
+      padding: 0 20px 20px;
+    }
+    .sidebar-label {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--gray);
+      margin-bottom: 8px;
+    }
+    .search-input {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      font-family: 'Merriweather', serif;
+      font-size: 12px;
+      outline: none;
+      background: var(--light);
+    }
+    .search-input:focus { border-color: var(--red); }
+
+    .filter-group { margin-bottom: 6px; }
+    .filter-btn {
+      width: 100%;
+      text-align: left;
+      padding: 7px 12px;
+      font-family: 'Oswald', sans-serif;
+      font-size: 12px;
+      letter-spacing: 0.5px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--charcoal);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: background 0.1s;
+    }
+    .filter-btn:hover { background: var(--light); }
+    .filter-btn.active { color: var(--red); background: #fff0f0; font-weight: 500; }
+    .filter-count {
+      font-size: 10px;
+      color: var(--gray);
+      background: var(--light);
+      padding: 1px 6px;
+      border-radius: 10px;
+    }
+
+    .sort-select {
+      width: 100%;
+      padding: 7px 12px;
+      border: 1px solid var(--border);
+      font-family: 'Oswald', sans-serif;
+      font-size: 12px;
+      letter-spacing: 0.5px;
+      background: var(--light);
+      color: var(--charcoal);
+      outline: none;
+      cursor: pointer;
+    }
+    .sort-select:focus { border-color: var(--red); }
+
+    .sidebar-divider {
+      height: 1px;
+      background: var(--border);
+      margin: 4px 20px 16px;
+    }
+
+    /* ── Export buttons ── */
+    .export-btn {
+      width: 100%;
+      padding: 9px 12px;
+      margin-bottom: 6px;
+      font-family: 'Oswald', sans-serif;
+      font-size: 11px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      background: var(--charcoal);
+      color: var(--white);
+      border: none;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .export-btn:hover { background: var(--red); }
+    .export-btn.secondary {
+      background: var(--white);
+      color: var(--charcoal);
+      border: 1px solid var(--border);
+    }
+    .export-btn.secondary:hover { background: var(--red); color: var(--white); border-color: var(--red); }
+
+    /* ── Article list ── */
+    .article-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0;
+    }
+
+    .category-group { }
+    .category-header {
+      position: sticky;
+      top: 0;
+      background: var(--charcoal);
+      padding: 8px 28px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      z-index: 10;
+    }
+    .category-bar {
+      width: 3px;
+      height: 16px;
+      background: var(--red);
+      flex-shrink: 0;
+    }
+    .category-name {
+      font-family: 'Oswald', sans-serif;
+      font-size: 11px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--white);
+    }
+    .category-count {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      color: var(--gray);
+      margin-left: auto;
+    }
+
+    .article-item {
+      padding: 14px 28px;
+      border-bottom: 1px solid var(--border);
+      background: var(--white);
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+      transition: background 0.1s;
+    }
+    .article-item:hover { background: #fafafa; }
+    .article-item.status-selected { background: var(--selected); border-left: 3px solid var(--red); padding-left: 25px; }
+    .article-item.status-maybe    { background: var(--maybe);   border-left: 3px solid #e0a800; padding-left: 25px; }
+    .article-item.status-skip     { background: var(--skip);    opacity: 0.55; }
+
+    .article-content { flex: 1; min-width: 0; }
+    .article-title {
+      font-family: 'Merriweather', serif;
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--charcoal);
+      text-decoration: none;
+      display: block;
+      margin-bottom: 4px;
+    }
+    .article-title:hover { color: var(--red); }
+    .article-meta {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--gray);
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .article-source { color: var(--charcoal); }
+    .article-note {
+      margin-top: 6px;
+      font-size: 11px;
+      color: var(--gray);
+      font-style: italic;
+    }
+
+    /* ── Status buttons ── */
+    .status-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .status-btn {
+      padding: 4px 10px;
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      border: 1px solid var(--border);
+      background: var(--white);
+      cursor: pointer;
+      transition: all 0.1s;
+      white-space: nowrap;
+    }
+    .status-btn:hover { border-color: var(--charcoal); }
+    .status-btn.active-selected { background: var(--red); color: var(--white); border-color: var(--red); }
+    .status-btn.active-maybe    { background: #e0a800; color: var(--white); border-color: #e0a800; }
+    .status-btn.active-skip     { background: var(--gray); color: var(--white); border-color: var(--gray); }
+
+    /* ── Loading / empty states ── */
+    .loading, .empty {
+      padding: 60px 28px;
+      text-align: center;
+      font-family: 'Oswald', sans-serif;
+      font-size: 13px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--gray);
+    }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--charcoal);
+      color: var(--white);
+      font-family: 'Oswald', sans-serif;
+      font-size: 12px;
+      letter-spacing: 1px;
+      padding: 10px 20px;
+      opacity: 0;
+      transition: opacity 0.2s;
+      pointer-events: none;
+      z-index: 999;
+    }
+    .toast.show { opacity: 1; }
+
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--light); }
+    ::-webkit-scrollbar-thumb { background: #ccc; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--gray); }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="header-left">
+      <div>
+        <div class="header-title">CITS</div>
+        <div class="header-sub">Newsletter Curator</div>
+      </div>
+      <div class="header-divider"></div>
+      <select class="week-selector" id="weekSelector" onchange="changeWeek(this.value)">
+        {% for w in weeks %}
+        <option value="{{ w }}" {% if w == selected_week %}selected{% endif %}>{{ w }}</option>
+        {% endfor %}
+        {% if not weeks %}
+        <option value="{{ selected_week }}">{{ selected_week }}</option>
+        {% endif %}
+      </select>
+    </div>
+  </header>
+
+  <div class="stats-bar" id="statsBar">
+    <div class="stat-item">Total <span id="statTotal">—</span></div>
+    <div class="stat-item">Unreviewed <span id="statUnreviewed">—</span></div>
+    <div class="stat-item selected">Selected <span id="statSelected">—</span></div>
+    <div class="stat-item">Maybe <span id="statMaybe">—</span></div>
+    <div class="stat-item">Skip <span id="statSkip">—</span></div>
+  </div>
+
+  <div class="layout">
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+
+      <div class="sidebar-section">
+        <div class="sidebar-label">Search</div>
+        <input type="text" class="search-input" id="searchInput"
+               placeholder="Search titles..." oninput="debounceLoad()">
+      </div>
+
+      <div class="sidebar-divider"></div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-label">Sort by</div>
+        <select class="sort-select" id="sortSelect" onchange="loadArticles()">
+          <option value="category">Category</option>
+          <option value="source">Source</option>
+          <option value="date">Date</option>
+          <option value="score">AI Score</option>
+        </select>
+      </div>
+
+      <div class="sidebar-divider"></div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-label">Status</div>
+        <div class="filter-group">
+          <button class="filter-btn active" onclick="setFilter('status', '', this)">
+            All <span class="filter-count" id="fcAll"></span>
+          </button>
+          <button class="filter-btn" onclick="setFilter('status', 'unreviewed', this)">
+            Unreviewed <span class="filter-count" id="fcUnreviewed"></span>
+          </button>
+          <button class="filter-btn" onclick="setFilter('status', 'selected', this)">
+            Selected <span class="filter-count" id="fcSelected"></span>
+          </button>
+          <button class="filter-btn" onclick="setFilter('status', 'maybe', this)">
+            Maybe <span class="filter-count" id="fcMaybe"></span>
+          </button>
+          <button class="filter-btn" onclick="setFilter('status', 'skip', this)">
+            Skip <span class="filter-count" id="fcSkip"></span>
+          </button>
+        </div>
+      </div>
+
+      <div class="sidebar-divider"></div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-label">Category</div>
+        <div id="categoryFilters">
+          <button class="filter-btn active" onclick="setFilter('category', '', this)">All</button>
+        </div>
+      </div>
+
+      <div class="sidebar-divider"></div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-label">Source</div>
+        <div id="sourceFilters">
+          <button class="filter-btn active" onclick="setFilter('source', '', this)">All</button>
+        </div>
+      </div>
+
+      <div class="sidebar-divider"></div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-label">Export Selected</div>
+        <button class="export-btn" onclick="exportArticles('csv', 'selected')">↓ CSV — Selected</button>
+        <button class="export-btn secondary" onclick="exportArticles('markdown', 'selected')">↓ Markdown — Selected</button>
+        <button class="export-btn secondary" onclick="exportArticles('csv', 'maybe')">↓ CSV — Maybe</button>
+      </div>
+
+    </aside>
+
+    <!-- Article list -->
+    <main class="article-list" id="articleList">
+      <div class="loading">Loading articles…</div>
+    </main>
+
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    let currentWeek = "{{ selected_week }}";
+    let filters = { category: "", source: "", status: "" };
+    let debounceTimer = null;
+
+    // ── Boot ──────────────────────────────────────────────────────────────────
+
+    window.addEventListener("DOMContentLoaded", () => {
+      loadFilters();
+      loadArticles();
+      loadStats();
+    });
+
+    // ── Week ──────────────────────────────────────────────────────────────────
+
+    function changeWeek(week) {
+      currentWeek = week;
+      filters = { category: "", source: "", status: "" };
+      loadFilters();
+      loadArticles();
+      loadStats();
+    }
+
+    // ── Filters ───────────────────────────────────────────────────────────────
+
+    async function loadFilters() {
+      const res = await fetch(`/api/filters?week=${currentWeek}`);
+      const data = await res.json();
+
+      const catDiv = document.getElementById("categoryFilters");
+      catDiv.innerHTML = `<button class="filter-btn active" onclick="setFilter('category', '', this)">All</button>`;
+      data.categories.forEach(c => {
+        const btn = document.createElement("button");
+        btn.className = "filter-btn";
+        btn.textContent = c;
+        btn.onclick = () => setFilter("category", c, btn);
+        catDiv.appendChild(btn);
+      });
+
+      const srcDiv = document.getElementById("sourceFilters");
+      srcDiv.innerHTML = `<button class="filter-btn active" onclick="setFilter('source', '', this)">All</button>`;
+      data.sources.forEach(s => {
+        const btn = document.createElement("button");
+        btn.className = "filter-btn";
+        btn.textContent = s;
+        btn.onclick = () => setFilter("source", s, btn);
+        srcDiv.appendChild(btn);
+      });
+    }
+
+    function setFilter(type, value, btn) {
+      filters[type] = value;
+      // Update active state within the button's parent
+      btn.parentElement.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      loadArticles();
+    }
+
+    // ── Articles ──────────────────────────────────────────────────────────────
+
+    function debounceLoad() {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(loadArticles, 300);
+    }
+
+    async function loadArticles() {
+      const search = document.getElementById("searchInput").value.trim();
+      const sort   = document.getElementById("sortSelect").value;
+
+      const params = new URLSearchParams({
+        week:     currentWeek,
+        category: filters.category,
+        source:   filters.source,
+        status:   filters.status,
+        search,
+        sort,
+      });
+
+      const list = document.getElementById("articleList");
+      list.innerHTML = `<div class="loading">Loading…</div>`;
+
+      const res = await fetch(`/api/articles?${params}`);
+      const articles = await res.json();
+
+      if (!articles.length) {
+        list.innerHTML = `<div class="empty">No articles found</div>`;
+        return;
+      }
+
+      // Group by category (or flat list for other sorts)
+      const sort_ = sort;
+      let html = "";
+
+      if (sort_ === "category" || sort_ === "score") {
+        const groups = {};
+        articles.forEach(a => {
+          if (!groups[a.category]) groups[a.category] = [];
+          groups[a.category].push(a);
+        });
+        for (const [cat, items] of Object.entries(groups)) {
+          html += renderCategoryHeader(cat, items.length);
+          items.forEach(a => { html += renderArticle(a); });
+        }
+      } else if (sort_ === "source") {
+        const groups = {};
+        articles.forEach(a => {
+          if (!groups[a.feed_name]) groups[a.feed_name] = [];
+          groups[a.feed_name].push(a);
+        });
+        for (const [src, items] of Object.entries(groups)) {
+          html += renderCategoryHeader(src, items.length);
+          items.forEach(a => { html += renderArticle(a); });
+        }
+      } else {
+        articles.forEach(a => { html += renderArticle(a); });
+      }
+
+      list.innerHTML = html;
+    }
+
+    function renderCategoryHeader(name, count) {
+      return `
+        <div class="category-header">
+          <div class="category-bar"></div>
+          <span class="category-name">${escHtml(name)}</span>
+          <span class="category-count">${count} articles</span>
+        </div>`;
+    }
+
+    function renderArticle(a) {
+      const statusClass = a.status !== "unreviewed" ? `status-${a.status}` : "";
+      const pub = a.published_at ? new Date(a.published_at).toLocaleDateString("en-US", {month:"short", day:"numeric"}) : "";
+      const score = a.ai_score ? `· Score ${a.ai_score}` : "";
+      const note  = a.curator_note ? `<div class="article-note">${escHtml(a.curator_note)}</div>` : "";
+      const summary = a.ai_summary ? `<div class="article-note" style="color:#555;font-style:normal;">${escHtml(a.ai_summary)}</div>` : "";
+
+      return `
+        <div class="article-item ${statusClass}" id="article-${a.id}">
+          <div class="article-content">
+            <a href="${a.url}" target="_blank" class="article-title">${escHtml(a.title)}</a>
+            <div class="article-meta">
+              <span class="article-source">${escHtml(a.feed_name)}</span>
+              ${pub ? `<span>${pub}</span>` : ""}
+              ${score}
+            </div>
+            ${summary}
+            ${note}
+          </div>
+          <div class="status-buttons">
+            <button class="status-btn ${a.status === 'selected' ? 'active-selected' : ''}"
+                    onclick="setStatus(${a.id}, 'selected')">✓ Select</button>
+            <button class="status-btn ${a.status === 'maybe' ? 'active-maybe' : ''}"
+                    onclick="setStatus(${a.id}, 'maybe')">? Maybe</button>
+            <button class="status-btn ${a.status === 'skip' ? 'active-skip' : ''}"
+                    onclick="setStatus(${a.id}, 'skip')">✕ Skip</button>
+          </div>
+        </div>`;
+    }
+
+    // ── Status update ─────────────────────────────────────────────────────────
+
+    async function setStatus(id, newStatus) {
+      const el = document.getElementById(`article-${id}`);
+      // Toggle off if already set
+      const currentStatus = el.className.includes(`status-${newStatus}`) ? "unreviewed" : newStatus;
+
+      const res = await fetch(`/api/articles/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: currentStatus }),
+      });
+      const updated = await res.json();
+
+      // Update row appearance
+      el.className = `article-item${updated.status !== "unreviewed" ? ` status-${updated.status}` : ""}`;
+      el.querySelectorAll(".status-btn").forEach(btn => {
+        btn.className = "status-btn";
+      });
+      if (updated.status !== "unreviewed") {
+        const activeBtn = el.querySelector(`[onclick="setStatus(${id}, '${updated.status}')"]`);
+        if (activeBtn) activeBtn.classList.add(`active-${updated.status}`);
+      }
+
+      loadStats();
+      showToast(currentStatus === "unreviewed" ? "Cleared" : `Marked as ${currentStatus}`);
+    }
+
+    // ── Stats ─────────────────────────────────────────────────────────────────
+
+    async function loadStats() {
+      const res = await fetch(`/api/stats?week=${currentWeek}`);
+      const data = await res.json();
+      document.getElementById("statTotal").textContent      = data.total;
+      document.getElementById("statUnreviewed").textContent = data.by_status.unreviewed || 0;
+      document.getElementById("statSelected").textContent   = data.by_status.selected   || 0;
+      document.getElementById("statMaybe").textContent      = data.by_status.maybe       || 0;
+      document.getElementById("statSkip").textContent       = data.by_status.skip        || 0;
+
+      // Update filter counts
+      document.getElementById("fcAll").textContent         = data.total;
+      document.getElementById("fcUnreviewed").textContent  = data.by_status.unreviewed || 0;
+      document.getElementById("fcSelected").textContent    = data.by_status.selected   || 0;
+      document.getElementById("fcMaybe").textContent       = data.by_status.maybe       || 0;
+      document.getElementById("fcSkip").textContent        = data.by_status.skip        || 0;
+    }
+
+    // ── Export ────────────────────────────────────────────────────────────────
+
+    function exportArticles(fmt, status) {
+      const url = `/api/export?week=${currentWeek}&format=${fmt}&status=${status}`;
+      window.location.href = url;
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    function showToast(msg) {
+      const t = document.getElementById("toast");
+      t.textContent = msg;
+      t.classList.add("show");
+      setTimeout(() => t.classList.remove("show"), 1800);
+    }
+
+    function escHtml(str) {
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+  </script>
+</body>
+</html>

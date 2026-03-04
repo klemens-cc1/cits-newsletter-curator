@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: cits-newsletter-curator
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn main:app
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cits-curator-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: INGEST_API_KEY
+        generateValue: true
+
+databases:
+  - name: cits-curator-db
+    databaseName: curator
+    plan: free
