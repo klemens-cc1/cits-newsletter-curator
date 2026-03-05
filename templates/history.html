@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CITS — Refresh History</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;500&family=Merriweather:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --red:      #ba0c2f;
+      --charcoal: #252525;
+      --mid:      #3a3a3a;
+      --gray:     #909090;
+      --light:    #efefef;
+      --white:    #ffffff;
+      --border:   #e0e0e0;
+    }
+
+    body {
+      font-family: 'Merriweather', Georgia, serif;
+      background: var(--light);
+      color: var(--charcoal);
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--charcoal);
+      padding: 0 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 64px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    .header-left { display: flex; align-items: center; gap: 20px; }
+    .header-title {
+      font-family: 'Oswald', sans-serif;
+      font-size: 13px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--red);
+    }
+    .header-sub {
+      font-family: 'Merriweather', serif;
+      font-size: 15px;
+      color: var(--white);
+      font-weight: 300;
+    }
+    .header-divider { width: 1px; height: 28px; background: #444; }
+    .nav-link {
+      font-family: 'Oswald', sans-serif;
+      font-size: 12px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--gray);
+      text-decoration: none;
+      padding: 6px 14px;
+      border: 1px solid #444;
+      transition: all 0.15s;
+    }
+    .nav-link:hover { color: var(--white); border-color: #666; }
+    .nav-link.active { color: var(--white); border-color: var(--red); }
+
+    /* ── Page layout ── */
+    .page { max-width: 960px; margin: 0 auto; padding: 36px 24px; }
+
+    .page-title {
+      font-family: 'Oswald', sans-serif;
+      font-size: 11px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--red);
+      margin-bottom: 6px;
+    }
+    .page-heading {
+      font-family: 'Merriweather', serif;
+      font-size: 22px;
+      font-weight: 300;
+      color: var(--charcoal);
+      margin-bottom: 32px;
+    }
+
+    /* ── Week cards ── */
+    .weeks-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+      margin-bottom: 48px;
+    }
+
+    .week-card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      padding: 20px 24px;
+      cursor: pointer;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      text-decoration: none;
+      display: block;
+    }
+    .week-card:hover {
+      border-color: var(--red);
+      box-shadow: 0 2px 12px rgba(186,12,47,0.08);
+    }
+    .week-card-key {
+      font-family: 'Oswald', sans-serif;
+      font-size: 18px;
+      font-weight: 500;
+      color: var(--charcoal);
+      margin-bottom: 4px;
+    }
+    .week-card-date {
+      font-family: 'Oswald', sans-serif;
+      font-size: 11px;
+      letter-spacing: 1px;
+      color: var(--gray);
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+    .week-card-stats {
+      display: flex;
+      gap: 20px;
+    }
+    .week-stat {
+      font-family: 'Oswald', sans-serif;
+      font-size: 11px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--gray);
+    }
+    .week-stat span {
+      display: block;
+      font-size: 20px;
+      color: var(--charcoal);
+      margin-bottom: 2px;
+    }
+    .week-stat.highlight span { color: var(--red); }
+    .week-card-footer {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .trigger-badge {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: 2px;
+    }
+    .trigger-badge.digest  { background: #f0f0f0; color: var(--charcoal); }
+    .trigger-badge.curate  { background: #fff0f0; color: var(--red); }
+    .week-card-time {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      color: var(--gray);
+      letter-spacing: 0.5px;
+    }
+
+    /* ── Refresh log table ── */
+    .section-label {
+      font-family: 'Oswald', sans-serif;
+      font-size: 11px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--gray);
+      margin-bottom: 12px;
+    }
+    .log-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--white);
+      border: 1px solid var(--border);
+    }
+    .log-table th {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--gray);
+      text-align: left;
+      padding: 10px 16px;
+      border-bottom: 2px solid var(--border);
+      background: var(--light);
+    }
+    .log-table td {
+      font-family: 'Oswald', sans-serif;
+      font-size: 12px;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      color: var(--charcoal);
+    }
+    .log-table tr:last-child td { border-bottom: none; }
+    .log-table tr:hover td { background: #fafafa; }
+    .log-table td.added   { color: #2a7a2a; font-weight: 500; }
+    .log-table td.skipped { color: var(--gray); }
+    .log-table td.week-link a {
+      color: var(--red);
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .log-table td.week-link a:hover { text-decoration: underline; }
+
+    .loading {
+      padding: 40px;
+      text-align: center;
+      font-family: 'Oswald', sans-serif;
+      font-size: 12px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--gray);
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="header-left">
+      <div>
+        <div class="header-title">CITS</div>
+        <div class="header-sub">Newsletter Curator</div>
+      </div>
+      <div class="header-divider"></div>
+      <a href="/" class="nav-link">← Curator</a>
+      <a href="/history" class="nav-link active">History</a>
+    </div>
+  </header>
+
+  <div class="page">
+
+    <div class="page-title">Archive</div>
+    <div class="page-heading">Refresh History &amp; Past Article Lists</div>
+
+    <div class="section-label">Article lists by week</div>
+    <div class="weeks-grid" id="weeksGrid">
+      <div class="loading">Loading weeks…</div>
+    </div>
+
+    <div class="section-label">Full refresh log</div>
+    <table class="log-table">
+      <thead>
+        <tr>
+          <th>Timestamp</th>
+          <th>Week</th>
+          <th>Trigger</th>
+          <th>Added</th>
+          <th>Skipped</th>
+        </tr>
+      </thead>
+      <tbody id="logBody">
+        <tr><td colspan="5" class="loading">Loading log…</td></tr>
+      </tbody>
+    </table>
+
+  </div>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", () => {
+      loadWeeks();
+      loadLog();
+    });
+
+    async function loadWeeks() {
+      const res = await fetch("/api/weeks");
+      const weeks = await res.json();
+      const grid = document.getElementById("weeksGrid");
+
+      if (!weeks.length) {
+        grid.innerHTML = `<div class="loading">No weeks found</div>`;
+        return;
+      }
+
+      grid.innerHTML = weeks.map(w => {
+        const trigger = w.last_trigger || "—";
+        const time = w.last_refreshed
+          ? new Date(w.last_refreshed).toLocaleString("en-US", {
+              month: "short", day: "numeric", hour: "numeric", minute: "2-digit"
+            })
+          : "—";
+
+        return `
+          <a class="week-card" href="/?week=${w.week_key}">
+            <div class="week-card-key">${w.week_key}</div>
+            <div class="week-card-stats">
+              <div class="week-stat">
+                <span>${w.total}</span>
+                Articles
+              </div>
+              <div class="week-stat highlight">
+                <span>${w.selected}</span>
+                Selected
+              </div>
+              <div class="week-stat">
+                <span>${w.maybe}</span>
+                Maybe
+              </div>
+            </div>
+            <div class="week-card-footer">
+              <span class="trigger-badge ${trigger}">${trigger}</span>
+              <span class="week-card-time">${time}</span>
+            </div>
+          </a>`;
+      }).join("");
+    }
+
+    async function loadLog() {
+      const res = await fetch("/api/refresh-log?limit=100");
+      const logs = await res.json();
+      const tbody = document.getElementById("logBody");
+
+      if (!logs.length) {
+        tbody.innerHTML = `<tr><td colspan="5" class="loading">No refresh log entries yet</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = logs.map(l => {
+        const time = new Date(l.pushed_at).toLocaleString("en-US", {
+          weekday: "short", month: "short", day: "numeric",
+          hour: "numeric", minute: "2-digit", timeZoneName: "short"
+        });
+        const badgeClass = l.triggered_by === "curate" ? "curate" : "digest";
+        return `
+          <tr>
+            <td>${time}</td>
+            <td class="week-link"><a href="/?week=${l.week_key}">${l.week_key}</a></td>
+            <td><span class="trigger-badge ${badgeClass}">${l.triggered_by}</span></td>
+            <td class="added">+${l.articles_added}</td>
+            <td class="skipped">${l.articles_skipped} skipped</td>
+          </tr>`;
+      }).join("");
+    }
+  </script>
+
+</body>
+</html>
