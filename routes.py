@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, render_template, request, Response
 from app import db
-from models import Article
+from models import Article, RefreshLog
 
 bp = Blueprint("main", __name__)
 
@@ -15,7 +15,7 @@ def current_week_key():
     return f"{now.year}-W{now.isocalendar()[1]:02d}"
 
 
-# ── Main UI ──────────────────────────────────────────────────────────────────
+# ── Main UI ───────────────────────────────────────────────────────────────────
 
 @bp.route("/")
 def index():
@@ -30,7 +30,12 @@ def index():
     return render_template("index.html", weeks=week_keys, selected_week=selected_week)
 
 
-# ── Articles API ─────────────────────────────────────────────────────────────
+@bp.route("/history")
+def history():
+    return render_template("history.html")
+
+
+# ── Articles API ──────────────────────────────────────────────────────────────
 
 @bp.route("/api/articles")
 def get_articles():
@@ -39,7 +44,7 @@ def get_articles():
     source = request.args.get("source", "")
     status = request.args.get("status", "")
     search = request.args.get("search", "").strip()
-    sort   = request.args.get("sort", "category")   # category | source | date | score
+    sort   = request.args.get("sort", "category")
 
     q = Article.query.filter_by(week_key=week)
 
@@ -58,11 +63,10 @@ def get_articles():
         q = q.order_by(Article.feed_name, Article.category)
     elif sort == "score":
         q = q.order_by(Article.ai_score.desc().nullslast())
-    else:  # default: category
+    else:
         q = q.order_by(Article.category, Article.feed_name)
 
-    articles = q.all()
-    return jsonify([a.to_dict() for a in articles])
+    return jsonify([a.to_dict() for a in q.all()])
 
 
 @bp.route("/api/articles/<int:article_id>", methods=["PATCH"])
@@ -77,7 +81,7 @@ def update_article(article_id):
     return jsonify(article.to_dict())
 
 
-# ── Ingest endpoint (called by aggregator) ───────────────────────────────────
+# ── Ingest endpoint (called by aggregator) ────────────────────────────────────
 
 @bp.route("/api/ingest", methods=["POST"])
 def ingest():
@@ -86,8 +90,9 @@ def ingest():
         return jsonify({"error": "unauthorized"}), 401
 
     data = request.get_json()
-    articles = data.get("articles", [])
-    week_key = data.get("week_key", current_week_key())
+    articles     = data.get("articles", [])
+    week_key     = data.get("week_key", current_week_key())
+    triggered_by = data.get("triggered_by", "digest")
 
     added = 0
     skipped = 0
@@ -103,7 +108,7 @@ def ingest():
             except Exception:
                 pass
 
-        article = Article(
+        db.session.add(Article(
             guid=a["guid"],
             title=a["title"],
             url=a["url"],
@@ -111,12 +116,75 @@ def ingest():
             category=a.get("category", "General"),
             published_at=pub,
             week_key=week_key,
-        )
-        db.session.add(article)
+        ))
         added += 1
+
+    # Log this refresh
+    db.session.add(RefreshLog(
+        week_key=week_key,
+        articles_added=added,
+        articles_skipped=skipped,
+        triggered_by=triggered_by,
+    ))
 
     db.session.commit()
     return jsonify({"added": added, "skipped": skipped, "week_key": week_key})
+
+
+# ── Refresh log API ───────────────────────────────────────────────────────────
+
+@bp.route("/api/refresh-log")
+def refresh_log():
+    limit = int(request.args.get("limit", 50))
+    logs = (
+        RefreshLog.query
+        .order_by(RefreshLog.pushed_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    # Attach article totals per week for the history view
+    result = []
+    for log in logs:
+        total = Article.query.filter_by(week_key=log.week_key).count()
+        selected = Article.query.filter_by(week_key=log.week_key, status="selected").count()
+        entry = log.to_dict()
+        entry["total_articles"] = total
+        entry["total_selected"] = selected
+        result.append(entry)
+
+    return jsonify(result)
+
+
+@bp.route("/api/weeks")
+def weeks():
+    """All weeks that have articles, with summary stats."""
+    week_rows = (
+        db.session.query(Article.week_key)
+        .distinct()
+        .order_by(Article.week_key.desc())
+        .all()
+    )
+    result = []
+    for (wk,) in week_rows:
+        total    = Article.query.filter_by(week_key=wk).count()
+        selected = Article.query.filter_by(week_key=wk, status="selected").count()
+        maybe    = Article.query.filter_by(week_key=wk, status="maybe").count()
+        latest_log = (
+            RefreshLog.query
+            .filter_by(week_key=wk)
+            .order_by(RefreshLog.pushed_at.desc())
+            .first()
+        )
+        result.append({
+            "week_key":      wk,
+            "total":         total,
+            "selected":      selected,
+            "maybe":         maybe,
+            "last_refreshed": latest_log.pushed_at.isoformat() if latest_log else None,
+            "last_trigger":  latest_log.triggered_by if latest_log else None,
+        })
+    return jsonify(result)
 
 
 # ── Stats API ─────────────────────────────────────────────────────────────────
@@ -127,19 +195,19 @@ def stats():
     articles = Article.query.filter_by(week_key=week).all()
 
     by_category = {}
-    by_source = {}
-    by_status = {"unreviewed": 0, "selected": 0, "maybe": 0, "skip": 0}
+    by_source   = {}
+    by_status   = {"unreviewed": 0, "selected": 0, "maybe": 0, "skip": 0}
 
     for a in articles:
         by_category[a.category] = by_category.get(a.category, 0) + 1
-        by_source[a.feed_name] = by_source.get(a.feed_name, 0) + 1
-        by_status[a.status] = by_status.get(a.status, 0) + 1
+        by_source[a.feed_name]  = by_source.get(a.feed_name, 0) + 1
+        by_status[a.status]     = by_status.get(a.status, 0) + 1
 
     return jsonify({
-        "total": len(articles),
+        "total":       len(articles),
         "by_category": by_category,
-        "by_source": by_source,
-        "by_status": by_status,
+        "by_source":   by_source,
+        "by_status":   by_status,
     })
 
 
@@ -167,14 +235,12 @@ def export():
                 lines.append(f"\n## {a.category}\n")
             note = f" — *{a.curator_note}*" if a.curator_note else ""
             lines.append(f"- [{a.title}]({a.url}) — {a.feed_name}{note}")
-        content = "\n".join(lines)
         return Response(
-            content,
+            "\n".join(lines),
             mimetype="text/markdown",
             headers={"Content-Disposition": f"attachment; filename=articles-{week}.md"}
         )
 
-    # Default: CSV
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(["title", "url", "feed_name", "category", "published_at", "status", "curator_note"])
@@ -192,7 +258,7 @@ def export():
     )
 
 
-# ── Categories and sources for filter dropdowns ───────────────────────────────
+# ── Filter dropdowns ──────────────────────────────────────────────────────────
 
 @bp.route("/api/filters")
 def filters():
