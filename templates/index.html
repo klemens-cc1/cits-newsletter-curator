@@ -65,6 +65,18 @@
       height: 28px;
       background: #444;
     }
+    .nav-link {
+      font-family: 'Oswald', sans-serif;
+      font-size: 12px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--gray);
+      text-decoration: none;
+      padding: 6px 14px;
+      border: 1px solid #444;
+      transition: all 0.15s;
+    }
+    .nav-link:hover { color: var(--white); border-color: #666; }
     .week-selector {
       font-family: 'Oswald', sans-serif;
       font-size: 12px;
@@ -359,6 +371,7 @@
         <div class="header-sub">Newsletter Curator</div>
       </div>
       <div class="header-divider"></div>
+      <a href="/history" class="nav-link">History</a>
       <select class="week-selector" id="weekSelector" onchange="changeWeek(this.value)">
         {% for w in weeks %}
         <option value="{{ w }}" {% if w == selected_week %}selected{% endif %}>{{ w }}</option>
@@ -467,15 +480,11 @@
     let filters = { category: "", source: "", status: "" };
     let debounceTimer = null;
 
-    // ── Boot ──────────────────────────────────────────────────────────────────
-
     window.addEventListener("DOMContentLoaded", () => {
       loadFilters();
       loadArticles();
       loadStats();
     });
-
-    // ── Week ──────────────────────────────────────────────────────────────────
 
     function changeWeek(week) {
       currentWeek = week;
@@ -484,8 +493,6 @@
       loadArticles();
       loadStats();
     }
-
-    // ── Filters ───────────────────────────────────────────────────────────────
 
     async function loadFilters() {
       const res = await fetch(`/api/filters?week=${currentWeek}`);
@@ -514,13 +521,10 @@
 
     function setFilter(type, value, btn) {
       filters[type] = value;
-      // Update active state within the button's parent
       btn.parentElement.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
       loadArticles();
     }
-
-    // ── Articles ──────────────────────────────────────────────────────────────
 
     function debounceLoad() {
       clearTimeout(debounceTimer);
@@ -551,7 +555,6 @@
         return;
       }
 
-      // Group by category (or flat list for other sorts)
       const sort_ = sort;
       let html = "";
 
@@ -621,11 +624,8 @@
         </div>`;
     }
 
-    // ── Status update ─────────────────────────────────────────────────────────
-
     async function setStatus(id, newStatus) {
       const el = document.getElementById(`article-${id}`);
-      // Toggle off if already set
       const currentStatus = el.className.includes(`status-${newStatus}`) ? "unreviewed" : newStatus;
 
       const res = await fetch(`/api/articles/${id}`, {
@@ -635,11 +635,8 @@
       });
       const updated = await res.json();
 
-      // Update row appearance
       el.className = `article-item${updated.status !== "unreviewed" ? ` status-${updated.status}` : ""}`;
-      el.querySelectorAll(".status-btn").forEach(btn => {
-        btn.className = "status-btn";
-      });
+      el.querySelectorAll(".status-btn").forEach(btn => { btn.className = "status-btn"; });
       if (updated.status !== "unreviewed") {
         const activeBtn = el.querySelector(`[onclick="setStatus(${id}, '${updated.status}')"]`);
         if (activeBtn) activeBtn.classList.add(`active-${updated.status}`);
@@ -649,8 +646,6 @@
       showToast(currentStatus === "unreviewed" ? "Cleared" : `Marked as ${currentStatus}`);
     }
 
-    // ── Stats ─────────────────────────────────────────────────────────────────
-
     async function loadStats() {
       const res = await fetch(`/api/stats?week=${currentWeek}`);
       const data = await res.json();
@@ -659,23 +654,17 @@
       document.getElementById("statSelected").textContent   = data.by_status.selected   || 0;
       document.getElementById("statMaybe").textContent      = data.by_status.maybe       || 0;
       document.getElementById("statSkip").textContent       = data.by_status.skip        || 0;
-
-      // Update filter counts
-      document.getElementById("fcAll").textContent         = data.total;
-      document.getElementById("fcUnreviewed").textContent  = data.by_status.unreviewed || 0;
-      document.getElementById("fcSelected").textContent    = data.by_status.selected   || 0;
-      document.getElementById("fcMaybe").textContent       = data.by_status.maybe       || 0;
-      document.getElementById("fcSkip").textContent        = data.by_status.skip        || 0;
+      document.getElementById("fcAll").textContent          = data.total;
+      document.getElementById("fcUnreviewed").textContent   = data.by_status.unreviewed || 0;
+      document.getElementById("fcSelected").textContent     = data.by_status.selected   || 0;
+      document.getElementById("fcMaybe").textContent        = data.by_status.maybe       || 0;
+      document.getElementById("fcSkip").textContent         = data.by_status.skip        || 0;
     }
-
-    // ── Export ────────────────────────────────────────────────────────────────
 
     function exportArticles(fmt, status) {
       const url = `/api/export?week=${currentWeek}&format=${fmt}&status=${status}`;
       window.location.href = url;
     }
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
 
     function showToast(msg) {
       const t = document.getElementById("toast");
