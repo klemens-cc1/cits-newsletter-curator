@@ -130,9 +130,7 @@
       overflow-y: auto;
       padding: 20px 0;
     }
-    .sidebar-section {
-      padding: 0 20px 20px;
-    }
+    .sidebar-section { padding: 0 20px 20px; }
     .sidebar-label {
       font-family: 'Oswald', sans-serif;
       font-size: 10px;
@@ -229,7 +227,8 @@
       padding: 0;
     }
 
-    .category-group { }
+    /* ── Category group ── */
+    .category-group {}
     .category-header {
       position: sticky;
       top: 0;
@@ -239,7 +238,10 @@
       align-items: center;
       gap: 12px;
       z-index: 10;
+      cursor: pointer;
+      user-select: none;
     }
+    .category-header:hover { background: var(--mid); }
     .category-bar {
       width: 3px;
       height: 16px;
@@ -259,7 +261,21 @@
       color: var(--gray);
       margin-left: auto;
     }
+    .category-chevron {
+      font-size: 10px;
+      color: var(--gray);
+      margin-left: 8px;
+      transition: transform 0.2s;
+      display: inline-block;
+    }
+    .category-chevron.collapsed { transform: rotate(-90deg); }
+    .category-articles {
+      overflow: hidden;
+      transition: max-height 0.25s ease;
+    }
+    .category-articles.collapsed { max-height: 0 !important; }
 
+    /* ── Article items ── */
     .article-item {
       padding: 14px 28px;
       border-bottom: 1px solid var(--border);
@@ -327,7 +343,7 @@
     .status-btn.active-maybe    { background: #e0a800; color: var(--white); border-color: #e0a800; }
     .status-btn.active-skip     { background: var(--gray); color: var(--white); border-color: var(--gray); }
 
-    /* ── Loading / empty states ── */
+    /* ── Loading / empty ── */
     .loading, .empty {
       padding: 60px 28px;
       text-align: center;
@@ -393,7 +409,6 @@
 
   <div class="layout">
 
-    <!-- Sidebar -->
     <aside class="sidebar">
 
       <div class="sidebar-section">
@@ -466,7 +481,6 @@
 
     </aside>
 
-    <!-- Article list -->
     <main class="article-list" id="articleList">
       <div class="loading">Loading articles…</div>
     </main>
@@ -480,6 +494,9 @@
     let filters = { category: "", source: "", status: "" };
     let debounceTimer = null;
 
+    // Track collapsed state by group name, persisted across reloads
+    let collapsedGroups = new Set();
+
     window.addEventListener("DOMContentLoaded", () => {
       loadFilters();
       loadArticles();
@@ -489,6 +506,7 @@
     function changeWeek(week) {
       currentWeek = week;
       filters = { category: "", source: "", status: "" };
+      collapsedGroups.clear();
       loadFilters();
       loadArticles();
       loadStats();
@@ -557,6 +575,7 @@
 
       const sort_ = sort;
       let html = "";
+      const canCollapse = (sort_ === "category" || sort_ === "score" || sort_ === "source");
 
       if (sort_ === "category" || sort_ === "score") {
         const groups = {};
@@ -565,8 +584,7 @@
           groups[a.category].push(a);
         });
         for (const [cat, items] of Object.entries(groups)) {
-          html += renderCategoryHeader(cat, items.length);
-          items.forEach(a => { html += renderArticle(a); });
+          html += renderGroup(cat, items, canCollapse);
         }
       } else if (sort_ === "source") {
         const groups = {};
@@ -575,23 +593,68 @@
           groups[a.feed_name].push(a);
         });
         for (const [src, items] of Object.entries(groups)) {
-          html += renderCategoryHeader(src, items.length);
-          items.forEach(a => { html += renderArticle(a); });
+          html += renderGroup(src, items, canCollapse);
         }
       } else {
         articles.forEach(a => { html += renderArticle(a); });
       }
 
       list.innerHTML = html;
+
+      // Set initial max-height for animation and restore collapsed state
+      list.querySelectorAll(".category-articles").forEach(el => {
+        const groupName = el.dataset.group;
+        const naturalHeight = el.scrollHeight;
+        el.style.maxHeight = naturalHeight + "px";
+        if (collapsedGroups.has(groupName)) {
+          el.classList.add("collapsed");
+          const chevron = el.previousElementSibling.querySelector(".category-chevron");
+          if (chevron) chevron.classList.add("collapsed");
+        }
+      });
     }
 
-    function renderCategoryHeader(name, count) {
+    function renderGroup(name, items, collapsible) {
+      const isCollapsed = collapsedGroups.has(name);
+      const chevron = collapsible
+        ? `<span class="category-chevron ${isCollapsed ? 'collapsed' : ''}">▼</span>`
+        : "";
+      const clickHandler = collapsible ? `onclick="toggleGroup(this, '${escAttr(name)}')"` : "";
+
       return `
-        <div class="category-header">
-          <div class="category-bar"></div>
-          <span class="category-name">${escHtml(name)}</span>
-          <span class="category-count">${count} articles</span>
+        <div class="category-group">
+          <div class="category-header" ${clickHandler}>
+            <div class="category-bar"></div>
+            <span class="category-name">${escHtml(name)}</span>
+            <span class="category-count">${items.length} articles</span>
+            ${chevron}
+          </div>
+          <div class="category-articles" data-group="${escAttr(name)}">
+            ${items.map(a => renderArticle(a)).join("")}
+          </div>
         </div>`;
+    }
+
+    function toggleGroup(headerEl, groupName) {
+      const articlesEl = headerEl.nextElementSibling;
+      const chevron = headerEl.querySelector(".category-chevron");
+      const isCollapsed = articlesEl.classList.contains("collapsed");
+
+      if (isCollapsed) {
+        // Expand
+        articlesEl.classList.remove("collapsed");
+        articlesEl.style.maxHeight = articlesEl.scrollHeight + "px";
+        chevron.classList.remove("collapsed");
+        collapsedGroups.delete(groupName);
+      } else {
+        // Collapse — set explicit height first so transition works
+        articlesEl.style.maxHeight = articlesEl.scrollHeight + "px";
+        requestAnimationFrame(() => {
+          articlesEl.classList.add("collapsed");
+          chevron.classList.add("collapsed");
+        });
+        collapsedGroups.add(groupName);
+      }
     }
 
     function renderArticle(a) {
@@ -662,8 +725,7 @@
     }
 
     function exportArticles(fmt, status) {
-      const url = `/api/export?week=${currentWeek}&format=${fmt}&status=${status}`;
-      window.location.href = url;
+      window.location.href = `/api/export?week=${currentWeek}&format=${fmt}&status=${status}`;
     }
 
     function showToast(msg) {
@@ -679,6 +741,10 @@
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
+    }
+
+    function escAttr(str) {
+      return String(str).replace(/'/g, "\\'");
     }
   </script>
 </body>
