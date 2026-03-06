@@ -215,46 +215,60 @@ def stats():
 
 @bp.route("/api/export")
 def export():
-    week   = request.args.get("week", current_week_key())
-    status = request.args.get("status", "selected")
-    fmt    = request.args.get("format", "csv")
+    week      = request.args.get("week", current_week_key())
+    status    = request.args.get("status", "selected")   # can be comma-separated e.g. "selected,maybe"
+    fmt       = request.args.get("format", "text")
+
+    statuses = [s.strip() for s in status.split(",")]
 
     articles = (
         Article.query
-        .filter_by(week_key=week, status=status)
+        .filter(Article.week_key == week, Article.status.in_(statuses))
         .order_by(Article.category, Article.feed_name)
         .all()
     )
 
-    if fmt == "markdown":
-        lines = [f"# Newsletter Articles — {week}\n"]
+    label = "-".join(statuses)
+
+    if fmt == "text":
+        lines = [f"CITS Newsletter — {week}", "=" * 48, ""]
         current_cat = None
         for a in articles:
             if a.category != current_cat:
                 current_cat = a.category
-                lines.append(f"\n## {a.category}\n")
-            note = f" — *{a.curator_note}*" if a.curator_note else ""
-            lines.append(f"- [{a.title}]({a.url}) — {a.feed_name}{note}")
+                if lines[-1] != "":
+                    lines.append("")
+                lines.append(current_cat.upper())
+                lines.append("-" * len(current_cat))
+            lines.append(a.title)
+            lines.append(a.url)
+            lines.append(f"Source: {a.feed_name}")
+            if a.curator_note:
+                lines.append(f"Note: {a.curator_note}")
+            if a.ai_summary:
+                lines.append(f"Summary: {a.ai_summary}")
+            lines.append("")
         return Response(
             "\n".join(lines),
-            mimetype="text/markdown",
-            headers={"Content-Disposition": f"attachment; filename=articles-{week}.md"}
+            mimetype="text/plain",
+            headers={"Content-Disposition": f"attachment; filename=articles-{week}-{label}.txt"}
         )
 
+    # CSV
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["title", "url", "feed_name", "category", "published_at", "status", "curator_note"])
+    writer.writerow(["title", "url", "feed_name", "category", "published_at", "status", "curator_note", "ai_summary"])
     for a in articles:
         writer.writerow([
             a.title, a.url, a.feed_name, a.category,
             a.published_at.isoformat() if a.published_at else "",
-            a.status, a.curator_note or ""
+            a.status, a.curator_note or "", a.ai_summary or ""
         ])
     output.seek(0)
     return Response(
         output.getvalue(),
         mimetype="text/csv",
-        headers={"Content-Disposition": f"attachment; filename=articles-{week}.csv"}
+        headers={"Content-Disposition": f"attachment; filename=articles-{week}-{label}.csv"}
     )
 
 
@@ -281,3 +295,111 @@ def filters():
         "categories": [c[0] for c in cats],
         "sources":    [s[0] for s in sources],
     })
+
+
+# ── On-demand summarization ───────────────────────────────────────────────────
+
+def fetch_article_text(url: str, max_chars: int = 4000) -> str:
+    """Fetch and extract main text from an article URL."""
+    try:
+        import urllib.request
+        import html
+        import re
+
+        req = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (compatible; CITS-Curator/1.0)",
+                "Accept": "text/html,application/xhtml+xml",
+            }
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            raw = resp.read().decode("utf-8", errors="ignore")
+
+        # Strip scripts, styles, nav, footer
+        raw = re.sub(r"<(script|style|nav|footer|header|aside)[^>]*>.*?</\1>", " ", raw, flags=re.DOTALL | re.IGNORECASE)
+        # Strip all remaining tags
+        text = re.sub(r"<[^>]+>", " ", raw)
+        # Decode HTML entities
+        text = html.unescape(text)
+        # Collapse whitespace
+        text = re.sub(r"\s+", " ", text).strip()
+
+        return text[:max_chars]
+    except Exception as e:
+        return ""
+
+
+def summarize_with_groq(title: str, source: str, body: str) -> str:
+    """Call Groq API to generate a 2-sentence summary."""
+    import urllib.request
+    import json
+
+    api_key = os.environ.get("GROQ_API_KEY", "")
+    if not api_key:
+        return ""
+
+    if body:
+        prompt = (
+            f"Article title: {title}\n"
+            f"Source: {source}\n\n"
+            f"Article text (excerpt):\n{body}\n\n"
+            f"Write a 2-sentence summary of this article focused on the key policy, "
+            f"energy security, or geopolitical implications. Be specific and factual. "
+            f"Do not start with 'This article' or 'The article'."
+        )
+    else:
+        prompt = (
+            f"Article title: {title}\n"
+            f"Source: {source}\n\n"
+            f"Based on this headline, write a 2-sentence summary of what this article "
+            f"likely covers, focused on energy security or geopolitical context."
+        )
+
+    payload = json.dumps({
+        "model": "llama3-8b-8192",
+        "max_tokens": 120,
+        "messages": [{"role": "user", "content": prompt}],
+    }).encode("utf-8")
+
+    req = urllib.request.Request(
+        "https://api.groq.com/openai/v1/chat/completions",
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+        method="POST",
+    )
+
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        result = json.loads(resp.read())
+        return result["choices"][0]["message"]["content"].strip()
+
+
+@bp.route("/api/articles/<int:article_id>/summarize", methods=["POST"])
+def summarize_article(article_id):
+    article = Article.query.get_or_404(article_id)
+
+    # Return cached summary if already exists
+    if article.ai_summary:
+        return jsonify({"summary": article.ai_summary, "cached": True})
+
+    try:
+        # 1. Fetch full article text
+        body = fetch_article_text(article.url)
+
+        # 2. Summarize with Groq (falls back to title-only if fetch failed)
+        summary = summarize_with_groq(article.title, article.feed_name, body)
+
+        if not summary:
+            return jsonify({"error": "Summarization failed — check GROQ_API_KEY"}), 500
+
+        # 3. Cache in database
+        article.ai_summary = summary
+        db.session.commit()
+
+        return jsonify({"summary": summary, "cached": False, "used_body": bool(body)})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
