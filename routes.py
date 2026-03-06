@@ -119,7 +119,6 @@ def ingest():
         ))
         added += 1
 
-    # Log this refresh
     db.session.add(RefreshLog(
         week_key=week_key,
         articles_added=added,
@@ -323,6 +322,7 @@ def fetch_article_text(url: str, max_chars: int = 4000) -> str:
 def summarize_with_groq(title: str, source: str, body: str) -> str:
     """Call Groq API to generate a 2-sentence summary."""
     import urllib.request
+    import urllib.error
     import json
 
     api_key = os.environ.get("GROQ_API_KEY", "")
@@ -362,9 +362,13 @@ def summarize_with_groq(title: str, source: str, body: str) -> str:
         method="POST",
     )
 
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        result = json.loads(resp.read())
-        return result["choices"][0]["message"]["content"].strip()
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            result = json.loads(resp.read())
+            return result["choices"][0]["message"]["content"].strip()
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="ignore")
+        raise ValueError(f"Groq HTTP {e.code}: {body}")
 
 
 @bp.route("/api/articles/<int:article_id>/summarize", methods=["POST"])
