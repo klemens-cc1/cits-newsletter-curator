@@ -414,7 +414,6 @@ def debug_summarize(article_id):
         return jsonify({"summary": summary, "body_length": len(body)})
     except Exception as e:
         return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
-```
 
 After Render redeploys, visit this URL in your browser (replace 23 with any article ID):
 ```
