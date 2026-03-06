@@ -143,7 +143,6 @@ def refresh_log():
         .all()
     )
 
-    # Attach article totals per week for the history view
     result = []
     for log in logs:
         total = Article.query.filter_by(week_key=log.week_key).count()
@@ -158,7 +157,6 @@ def refresh_log():
 
 @bp.route("/api/weeks")
 def weeks():
-    """All weeks that have articles, with summary stats."""
     week_rows = (
         db.session.query(Article.week_key)
         .distinct()
@@ -177,12 +175,12 @@ def weeks():
             .first()
         )
         result.append({
-            "week_key":      wk,
-            "total":         total,
-            "selected":      selected,
-            "maybe":         maybe,
+            "week_key":       wk,
+            "total":          total,
+            "selected":       selected,
+            "maybe":          maybe,
             "last_refreshed": latest_log.pushed_at.isoformat() if latest_log else None,
-            "last_trigger":  latest_log.triggered_by if latest_log else None,
+            "last_trigger":   latest_log.triggered_by if latest_log else None,
         })
     return jsonify(result)
 
@@ -215,19 +213,17 @@ def stats():
 
 @bp.route("/api/export")
 def export():
-    week      = request.args.get("week", current_week_key())
-    status    = request.args.get("status", "selected")   # can be comma-separated e.g. "selected,maybe"
-    fmt       = request.args.get("format", "text")
+    week     = request.args.get("week", current_week_key())
+    status   = request.args.get("status", "selected")
+    fmt      = request.args.get("format", "text")
 
     statuses = [s.strip() for s in status.split(",")]
-
     articles = (
         Article.query
         .filter(Article.week_key == week, Article.status.in_(statuses))
         .order_by(Article.category, Article.feed_name)
         .all()
     )
-
     label = "-".join(statuses)
 
     if fmt == "text":
@@ -254,7 +250,6 @@ def export():
             headers={"Content-Disposition": f"attachment; filename=articles-{week}-{label}.txt"}
         )
 
-    # CSV
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(["title", "url", "feed_name", "category", "published_at", "status", "curator_note", "ai_summary"])
@@ -316,17 +311,12 @@ def fetch_article_text(url: str, max_chars: int = 4000) -> str:
         with urllib.request.urlopen(req, timeout=10) as resp:
             raw = resp.read().decode("utf-8", errors="ignore")
 
-        # Strip scripts, styles, nav, footer
         raw = re.sub(r"<(script|style|nav|footer|header|aside)[^>]*>.*?</\1>", " ", raw, flags=re.DOTALL | re.IGNORECASE)
-        # Strip all remaining tags
         text = re.sub(r"<[^>]+>", " ", raw)
-        # Decode HTML entities
         text = html.unescape(text)
-        # Collapse whitespace
         text = re.sub(r"\s+", " ", text).strip()
-
         return text[:max_chars]
-    except Exception as e:
+    except Exception:
         return ""
 
 
@@ -337,7 +327,7 @@ def summarize_with_groq(title: str, source: str, body: str) -> str:
 
     api_key = os.environ.get("GROQ_API_KEY", "")
     if not api_key:
-        return ""
+        raise ValueError("GROQ_API_KEY not set in environment")
 
     if body:
         prompt = (
@@ -381,28 +371,35 @@ def summarize_with_groq(title: str, source: str, body: str) -> str:
 def summarize_article(article_id):
     article = Article.query.get_or_404(article_id)
 
-    # Return cached summary if already exists
     if article.ai_summary:
         return jsonify({"summary": article.ai_summary, "cached": True})
 
     try:
-        # 1. Fetch full article text
         body = fetch_article_text(article.url)
-
-        # 2. Summarize with Groq (falls back to title-only if fetch failed)
         summary = summarize_with_groq(article.title, article.feed_name, body)
 
         if not summary:
-            return jsonify({"error": "Summarization failed — check GROQ_API_KEY"}), 500
+            return jsonify({"error": "Empty summary returned"}), 500
 
-        # 3. Cache in database
         article.ai_summary = summary
         db.session.commit()
-
         return jsonify({"summary": summary, "cached": False, "used_body": bool(body)})
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ── Debug endpoints (remove after troubleshooting) ────────────────────────────
+
+@bp.route("/api/debug/env")
+def debug_env():
+    key = os.environ.get("GROQ_API_KEY", "NOT SET")
+    return jsonify({
+        "key_set": key != "NOT SET",
+        "key_prefix": key[:8] if key != "NOT SET" else "NOT SET",
+        "key_length": len(key) if key != "NOT SET" else 0,
+    })
+
 
 @bp.route("/api/debug/summarize/<int:article_id>", methods=["POST"])
 def debug_summarize(article_id):
@@ -414,4 +411,3 @@ def debug_summarize(article_id):
         return jsonify({"summary": summary, "body_length": len(body)})
     except Exception as e:
         return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
-        
