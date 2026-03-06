@@ -403,3 +403,19 @@ def summarize_article(article_id):
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@bp.route("/api/debug/summarize/<int:article_id>", methods=["POST"])
+def debug_summarize(article_id):
+    import traceback
+    article = Article.query.get_or_404(article_id)
+    try:
+        body = fetch_article_text(article.url)
+        summary = summarize_with_groq(article.title, article.feed_name, body)
+        return jsonify({"summary": summary, "body_length": len(body)})
+    except Exception as e:
+        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+```
+
+After Render redeploys, visit this URL in your browser (replace 23 with any article ID):
+```
+https://cits-newsletter-curator.onrender.com/api/debug/summarize/23
