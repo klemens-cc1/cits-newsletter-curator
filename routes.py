@@ -346,11 +346,11 @@ def summarize_with_groq(title: str, source: str, body: str) -> str:
             f"likely covers, focused on energy security or geopolitical context."
         )
 
-    payload = json.dumps({
-        "model": "llama3-8b-8192",
-        "max_tokens": 120,
-        "messages": [{"role": "user", "content": prompt}],
-    }).encode("utf-8")
+   payload = json.dumps({
+    "model": "llama-3.1-8b-instant",
+    "max_tokens": 120,
+    "messages": [{"role": "user", "content": prompt}],
+}).encode("utf-8")
 
     req = urllib.request.Request(
         "https://api.groq.com/openai/v1/chat/completions",
