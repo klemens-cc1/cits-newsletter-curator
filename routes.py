@@ -346,7 +346,7 @@ def summarize_with_groq(title: str, source: str, body: str) -> str:
             f"likely covers, focused on energy security or geopolitical context."
         )
 
-   payload = json.dumps({
+    payload = json.dumps({
         "model": "llama-3.1-8b-instant",
         "max_tokens": 120,
         "messages": [{"role": "user", "content": prompt}],
@@ -367,8 +367,8 @@ def summarize_with_groq(title: str, source: str, body: str) -> str:
             result = json.loads(resp.read())
             return result["choices"][0]["message"]["content"].strip()
     except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", errors="ignore")
-        raise ValueError(f"Groq HTTP {e.code}: {body}")
+        err_body = e.read().decode("utf-8", errors="ignore")
+        raise ValueError(f"Groq HTTP {e.code}: {err_body}")
 
 
 @bp.route("/api/articles/<int:article_id>/summarize", methods=["POST"])
