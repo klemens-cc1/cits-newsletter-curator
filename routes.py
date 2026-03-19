@@ -314,6 +314,9 @@ def fetch_article_text(url: str, max_chars: int = 4000) -> str:
         text = re.sub(r"<[^>]+>", " ", raw)
         text = html.unescape(text)
         text = re.sub(r"\s+", " ", text).strip()
+        # Require at least 300 chars — less is likely a paywall/redirect page
+        if len(text) < 300:
+            return ""
         return text[:max_chars]
     except Exception:
         return ""
@@ -332,7 +335,9 @@ def summarize_with_groq(title: str, source: str, body: str) -> str:
             f"Article text (excerpt):\n{body}\n\n"
             f"Write a 2-sentence summary of this article focused on the key policy, "
             f"energy security, or geopolitical implications. Be specific and factual. "
-            f"Do not start with 'This article' or 'The article'."
+            f"Do not start with 'This article' or 'The article'. "
+            f"If the text appears to be a login page, paywall, cookie notice, or does not contain "
+            f"readable article content, respond only with the exact word: PAYWALL"
         )
     else:
         prompt = (
@@ -359,7 +364,10 @@ def summarize_with_groq(title: str, source: str, body: str) -> str:
     if not resp.ok:
         raise ValueError(f"Groq HTTP {resp.status_code}: {resp.text}")
 
-    return resp.json()["choices"][0]["message"]["content"].strip()
+    result = resp.json()["choices"][0]["message"]["content"].strip()
+    if result.upper().startswith("PAYWALL"):
+        return "__PAYWALL__"
+    return result
 
 
 @bp.route("/api/articles/<int:article_id>/summarize", methods=["POST"])
@@ -376,8 +384,8 @@ def summarize_article(article_id):
 
         summary = summarize_with_groq(article.title, article.feed_name, body)
 
-        if not summary:
-            return jsonify({"error": "Empty summary returned"}), 500
+        if not summary or summary == "__PAYWALL__":
+            return jsonify({"error": "Summarization Failed: Article Paywall or Javascript error"}), 500
 
         article.ai_summary = summary
         db.session.commit()
