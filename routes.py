@@ -3,6 +3,7 @@ import io
 import os
 from datetime import datetime, timezone
 
+import requests as req_lib
 from flask import Blueprint, jsonify, render_template, request, Response
 from app import db
 from models import Article, RefreshLog
@@ -296,19 +297,18 @@ def filters():
 def fetch_article_text(url: str, max_chars: int = 4000) -> str:
     """Fetch and extract main text from an article URL."""
     try:
-        import urllib.request
         import html
         import re
 
-        req = urllib.request.Request(
+        resp = req_lib.get(
             url,
             headers={
-                "User-Agent": "Mozilla/5.0 (compatible; CITS-Curator/1.0)",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 "Accept": "text/html,application/xhtml+xml",
-            }
+            },
+            timeout=10,
         )
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            raw = resp.read().decode("utf-8", errors="ignore")
+        raw = resp.text
 
         raw = re.sub(r"<(script|style|nav|footer|header|aside)[^>]*>.*?</\1>", " ", raw, flags=re.DOTALL | re.IGNORECASE)
         text = re.sub(r"<[^>]+>", " ", raw)
@@ -321,10 +321,6 @@ def fetch_article_text(url: str, max_chars: int = 4000) -> str:
 
 def summarize_with_groq(title: str, source: str, body: str) -> str:
     """Call Groq API to generate a 2-sentence summary."""
-    import urllib.request
-    import urllib.error
-    import json
-
     api_key = os.environ.get("GROQ_API_KEY", "")
     if not api_key:
         raise ValueError("GROQ_API_KEY not set in environment")
@@ -346,29 +342,24 @@ def summarize_with_groq(title: str, source: str, body: str) -> str:
             f"likely covers, focused on energy security or geopolitical context."
         )
 
-    payload = json.dumps({
-        "model": "llama-3.1-8b-instant",
-        "max_tokens": 120,
-        "messages": [{"role": "user", "content": prompt}],
-    }).encode("utf-8")
-
-    req = urllib.request.Request(
+    resp = req_lib.post(
         "https://api.groq.com/openai/v1/chat/completions",
-        data=payload,
         headers={
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}",
         },
-        method="POST",
+        json={
+            "model": "llama-3.1-8b-instant",
+            "max_tokens": 120,
+            "messages": [{"role": "user", "content": prompt}],
+        },
+        timeout=15,
     )
 
-    try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            result = json.loads(resp.read())
-            return result["choices"][0]["message"]["content"].strip()
-    except urllib.error.HTTPError as e:
-        err_body = e.read().decode("utf-8", errors="ignore")
-        raise ValueError(f"Groq HTTP {e.code}: {err_body}")
+    if not resp.ok:
+        raise ValueError(f"Groq HTTP {resp.status_code}: {resp.text}")
+
+    return resp.json()["choices"][0]["message"]["content"].strip()
 
 
 @bp.route("/api/articles/<int:article_id>/summarize", methods=["POST"])
