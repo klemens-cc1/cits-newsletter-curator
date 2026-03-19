@@ -371,6 +371,9 @@ def summarize_article(article_id):
 
     try:
         body = fetch_article_text(article.url)
+        if not body:
+            return jsonify({"error": "Summarization Failed: Article Paywall or Javascript error"}), 500
+
         summary = summarize_with_groq(article.title, article.feed_name, body)
 
         if not summary:
