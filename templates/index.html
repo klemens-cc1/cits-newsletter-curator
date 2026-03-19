@@ -77,6 +77,20 @@
       transition: all 0.15s;
     }
     .nav-link:hover { color: var(--white); border-color: #666; }
+    .refresh-btn {
+      font-family: 'Oswald', sans-serif;
+      font-size: 12px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--gray);
+      background: none;
+      padding: 6px 14px;
+      border: 1px solid #444;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .refresh-btn:hover { color: var(--white); border-color: #666; }
+    .refresh-btn:disabled { opacity: 0.5; cursor: wait; }
     .week-selector {
       font-family: 'Oswald', sans-serif;
       font-size: 12px;
@@ -430,6 +444,7 @@
       </div>
       <div class="header-divider"></div>
       <a href="/history" class="nav-link">History</a>
+      <button class="refresh-btn" id="refreshBtn" onclick="triggerRefresh()">↻ Refresh</button>
       <select class="week-selector" id="weekSelector" onchange="changeWeek(this.value)">
         {% for w in weeks %}
         <option value="{{ w }}" {% if w == selected_week %}selected{% endif %}>{{ w }}</option>
@@ -813,11 +828,11 @@
         // Replace button with toggle + drawer
         const toggle = document.createElement("button");
         toggle.className = "summary-toggle";
-        toggle.textContent = "▶ Summary";
+        toggle.textContent = "▼ Summary";
         toggle.onclick = () => toggleSummary(toggle);
 
         const drawer = document.createElement("div");
-        drawer.className = "summary-drawer";
+        drawer.className = "summary-drawer open";
         drawer.textContent = data.summary;
 
         btn.replaceWith(toggle);
@@ -835,6 +850,42 @@
       const open = drawer.classList.toggle("open");
       btn.textContent = open ? "▼ Summary" : "▶ Summary";
     }
+
+    async function triggerRefresh() {
+      const password = prompt("Enter refresh password:");
+      if (!password) return;
+
+      const btn = document.getElementById("refreshBtn");
+      btn.disabled = true;
+      btn.textContent = "Refreshing…";
+
+      try {
+        const res = await fetch("/api/trigger-refresh", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password }),
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+          btn.textContent = "✓ Triggered";
+          showToast("Refresh started — articles will appear in ~2 minutes");
+          setTimeout(() => {
+            btn.disabled = false;
+            btn.textContent = "↻ Refresh";
+          }, 30000);
+        } else {
+          showToast(data.error || "Refresh failed");
+          btn.disabled = false;
+          btn.textContent = "↻ Refresh";
+        }
+      } catch (e) {
+        showToast("Refresh failed — try again");
+        btn.disabled = false;
+        btn.textContent = "↻ Refresh";
+      }
+    }
+
   </script>
 </body>
 </html>
