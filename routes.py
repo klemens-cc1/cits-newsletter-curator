@@ -395,6 +395,42 @@ def summarize_article(article_id):
         return jsonify({"error": str(e)}), 500
 
 
+# ── Trigger aggregator refresh ───────────────────────────────────────────────
+
+@bp.route("/api/trigger-refresh", methods=["POST"])
+def trigger_refresh():
+    # Verify refresh password
+    data = request.get_json() or {}
+    password = data.get("password", "")
+    expected = os.environ.get("REFRESH_PASSWORD", "")
+
+    if not expected:
+        return jsonify({"error": "REFRESH_PASSWORD not configured"}), 500
+    if password != expected:
+        return jsonify({"error": "Invalid password"}), 403
+
+    # Trigger GitHub Actions workflow dispatch
+    github_token = os.environ.get("GITHUB_PAT", "")
+    if not github_token:
+        return jsonify({"error": "GITHUB_PAT not configured"}), 500
+
+    resp = req_lib.post(
+        "https://api.github.com/repos/klemens-cc1/energy-security-aggregator/actions/workflows/curator-refresh.yml/dispatches",
+        headers={
+            "Authorization": f"Bearer {github_token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+        json={"ref": "main"},
+        timeout=10,
+    )
+
+    if resp.status_code == 204:
+        return jsonify({"status": "triggered", "message": "Refresh started — new articles will appear in ~2 minutes"})
+    else:
+        return jsonify({"error": f"GitHub API error {resp.status_code}: {resp.text}"}), 500
+
+
 # ── Debug endpoints (remove after troubleshooting) ────────────────────────────
 
 @bp.route("/api/debug/env")
