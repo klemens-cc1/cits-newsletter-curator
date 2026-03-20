@@ -42,11 +42,7 @@
       z-index: 100;
       box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     }
-    .header-left {
-      display: flex;
-      align-items: center;
-      gap: 20px;
-    }
+    .header-left { display: flex; align-items: center; gap: 14px; }
     .header-title {
       font-family: 'Oswald', sans-serif;
       font-size: 13px;
@@ -60,11 +56,7 @@
       color: var(--white);
       font-weight: 300;
     }
-    .header-divider {
-      width: 1px;
-      height: 28px;
-      background: #444;
-    }
+    .header-divider { width: 1px; height: 28px; background: #444; }
     .nav-link {
       font-family: 'Oswald', sans-serif;
       font-size: 12px;
@@ -72,25 +64,26 @@
       text-transform: uppercase;
       color: var(--gray);
       text-decoration: none;
-      padding: 6px 14px;
+      padding: 6px 12px;
       border: 1px solid #444;
       transition: all 0.15s;
     }
     .nav-link:hover { color: var(--white); border-color: #666; }
-    .refresh-btn {
+    .header-btn {
       font-family: 'Oswald', sans-serif;
       font-size: 12px;
       letter-spacing: 1.5px;
       text-transform: uppercase;
       color: var(--gray);
       background: none;
-      padding: 6px 14px;
+      padding: 6px 12px;
       border: 1px solid #444;
       cursor: pointer;
       transition: all 0.15s;
     }
-    .refresh-btn:hover { color: var(--white); border-color: #666; }
-    .refresh-btn:disabled { opacity: 0.5; cursor: wait; }
+    .header-btn:hover { color: var(--white); border-color: #666; }
+    .header-btn:disabled { opacity: 0.5; cursor: wait; }
+    .header-btn.active { color: var(--white); border-color: var(--red); background: rgba(186,12,47,0.15); }
     .week-selector {
       font-family: 'Oswald', sans-serif;
       font-size: 12px;
@@ -121,19 +114,11 @@
       text-transform: uppercase;
       color: var(--gray);
     }
-    .stat-item span {
-      color: var(--charcoal);
-      font-size: 16px;
-      font-weight: 500;
-      margin-left: 4px;
-    }
+    .stat-item span { color: var(--charcoal); font-size: 16px; font-weight: 500; margin-left: 4px; }
     .stat-item.selected span { color: var(--red); }
 
     /* ── Layout ── */
-    .layout {
-      display: flex;
-      height: calc(100vh - 64px - 45px);
-    }
+    .layout { display: flex; height: calc(100vh - 64px - 45px); }
 
     /* ── Sidebar ── */
     .sidebar {
@@ -163,7 +148,6 @@
       background: var(--light);
     }
     .search-input:focus { border-color: var(--red); }
-
     .filter-group { margin-bottom: 6px; }
     .filter-btn {
       width: 100%;
@@ -190,7 +174,6 @@
       padding: 1px 6px;
       border-radius: 10px;
     }
-
     .sort-select {
       width: 100%;
       padding: 7px 12px;
@@ -204,12 +187,7 @@
       cursor: pointer;
     }
     .sort-select:focus { border-color: var(--red); }
-
-    .sidebar-divider {
-      height: 1px;
-      background: var(--border);
-      margin: 4px 20px 16px;
-    }
+    .sidebar-divider { height: 1px; background: var(--border); margin: 4px 20px 16px; }
 
     /* ── Export buttons ── */
     .export-btn {
@@ -227,19 +205,11 @@
       transition: background 0.15s;
     }
     .export-btn:hover { background: var(--red); }
-    .export-btn.secondary {
-      background: var(--white);
-      color: var(--charcoal);
-      border: 1px solid var(--border);
-    }
+    .export-btn.secondary { background: var(--white); color: var(--charcoal); border: 1px solid var(--border); }
     .export-btn.secondary:hover { background: var(--red); color: var(--white); border-color: var(--red); }
 
     /* ── Article list ── */
-    .article-list {
-      flex: 1;
-      overflow-y: auto;
-      padding: 0;
-    }
+    .article-list { flex: 1; overflow-y: auto; padding: 0; }
 
     /* ── Category group ── */
     .category-group {}
@@ -256,12 +226,7 @@
       user-select: none;
     }
     .category-header:hover { background: var(--mid); }
-    .category-bar {
-      width: 3px;
-      height: 16px;
-      background: var(--red);
-      flex-shrink: 0;
-    }
+    .category-bar { width: 3px; height: 16px; background: var(--red); flex-shrink: 0; }
     .category-name {
       font-family: 'Oswald', sans-serif;
       font-size: 11px;
@@ -269,24 +234,10 @@
       text-transform: uppercase;
       color: var(--white);
     }
-    .category-count {
-      font-family: 'Oswald', sans-serif;
-      font-size: 10px;
-      color: var(--gray);
-      margin-left: auto;
-    }
-    .category-chevron {
-      font-size: 10px;
-      color: var(--gray);
-      margin-left: 8px;
-      transition: transform 0.2s;
-      display: inline-block;
-    }
+    .category-count { font-family: 'Oswald', sans-serif; font-size: 10px; color: var(--gray); margin-left: auto; }
+    .category-chevron { font-size: 10px; color: var(--gray); margin-left: 8px; transition: transform 0.2s; display: inline-block; }
     .category-chevron.collapsed { transform: rotate(-90deg); }
-    .category-articles {
-      overflow: hidden;
-      transition: max-height 0.25s ease;
-    }
+    .category-articles { overflow: hidden; transition: max-height 0.25s ease; }
     .category-articles.collapsed { max-height: 0 !important; }
 
     /* ── Article items ── */
@@ -298,11 +249,25 @@
       gap: 16px;
       align-items: flex-start;
       transition: background 0.1s;
+      outline: none;
     }
     .article-item:hover { background: #fafafa; }
+    .article-item.focused { box-shadow: inset 3px 0 0 #4a90e2; background: #f8f8ff; }
     .article-item.status-selected { background: var(--selected); border-left: 3px solid var(--red); padding-left: 25px; }
     .article-item.status-maybe    { background: var(--maybe);   border-left: 3px solid #e0a800; padding-left: 25px; }
     .article-item.status-skip     { background: var(--skip);    opacity: 0.55; }
+    .article-item.status-selected.focused { box-shadow: inset 3px 0 0 #4a90e2; }
+
+    /* ── Compact mode ── */
+    body.compact .article-meta { display: none; }
+    body.compact .article-note { display: none; }
+    body.compact .summarize-btn { display: none; }
+    body.compact .summary-toggle { display: none; }
+    body.compact .summary-drawer { display: none !important; }
+    body.compact .article-item { padding: 8px 28px; }
+    body.compact .article-item.status-selected,
+    body.compact .article-item.status-maybe { padding-left: 25px; }
+    body.compact .article-title { font-size: 12px; margin-bottom: 0; }
 
     .article-content { flex: 1; min-width: 0; }
     .article-title {
@@ -326,20 +291,10 @@
       flex-wrap: wrap;
     }
     .article-source { color: var(--charcoal); }
-    .article-note {
-      margin-top: 6px;
-      font-size: 11px;
-      color: var(--gray);
-      font-style: italic;
-    }
+    .article-note { margin-top: 6px; font-size: 11px; color: var(--gray); font-style: italic; }
 
     /* ── Status buttons ── */
-    .status-buttons {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      flex-shrink: 0;
-    }
+    .status-buttons { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
     .status-btn {
       padding: 4px 10px;
       font-family: 'Oswald', sans-serif;
@@ -357,37 +312,7 @@
     .status-btn.active-maybe    { background: #e0a800; color: var(--white); border-color: #e0a800; }
     .status-btn.active-skip     { background: var(--gray); color: var(--white); border-color: var(--gray); }
 
-    /* ── Loading / empty ── */
-    .loading, .empty {
-      padding: 60px 28px;
-      text-align: center;
-      font-family: 'Oswald', sans-serif;
-      font-size: 13px;
-      letter-spacing: 2px;
-      text-transform: uppercase;
-      color: var(--gray);
-    }
-
-    /* ── Toast ── */
-    .toast {
-      position: fixed;
-      bottom: 24px;
-      right: 24px;
-      background: var(--charcoal);
-      color: var(--white);
-      font-family: 'Oswald', sans-serif;
-      font-size: 12px;
-      letter-spacing: 1px;
-      padding: 10px 20px;
-      opacity: 0;
-      transition: opacity 0.2s;
-      pointer-events: none;
-      z-index: 999;
-    }
-    .toast.show { opacity: 1; }
-
-
-    /* ── Summarize button ── */
+    /* ── Summarize / summary ── */
     .summarize-btn {
       margin-top: 7px;
       padding: 3px 10px;
@@ -428,6 +353,125 @@
       padding-left: 8px;
     }
     .summary-drawer.open { display: block; }
+
+    /* ── Loading / empty ── */
+    .loading, .empty {
+      padding: 60px 28px;
+      text-align: center;
+      font-family: 'Oswald', sans-serif;
+      font-size: 13px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--gray);
+    }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--charcoal);
+      color: var(--white);
+      font-family: 'Oswald', sans-serif;
+      font-size: 12px;
+      letter-spacing: 1px;
+      padding: 10px 20px;
+      opacity: 0;
+      transition: opacity 0.2s;
+      pointer-events: none;
+      z-index: 999;
+    }
+    .toast.show { opacity: 1; }
+
+    /* ── Info modal ── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      z-index: 500;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--white);
+      width: 580px;
+      max-width: 95vw;
+      max-height: 85vh;
+      overflow-y: auto;
+      border-top: 3px solid var(--red);
+    }
+    .modal-header {
+      background: var(--charcoal);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .modal-title {
+      font-family: 'Oswald', sans-serif;
+      font-size: 13px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--white);
+    }
+    .modal-close {
+      font-family: 'Oswald', sans-serif;
+      font-size: 18px;
+      color: var(--gray);
+      background: none;
+      border: none;
+      cursor: pointer;
+      line-height: 1;
+    }
+    .modal-close:hover { color: var(--white); }
+    .modal-body { padding: 24px; }
+    .modal-section-title {
+      font-family: 'Oswald', sans-serif;
+      font-size: 11px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--red);
+      margin-bottom: 12px;
+      margin-top: 20px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid var(--border);
+    }
+    .modal-section-title:first-child { margin-top: 0; }
+    .shortcut-grid {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 6px 16px;
+      margin-bottom: 8px;
+    }
+    .shortcut-key {
+      font-family: 'Oswald', sans-serif;
+      font-size: 11px;
+      background: var(--light);
+      border: 1px solid var(--border);
+      padding: 2px 8px;
+      border-radius: 3px;
+      color: var(--charcoal);
+      white-space: nowrap;
+      justify-self: start;
+      align-self: center;
+    }
+    .shortcut-desc {
+      font-family: 'Merriweather', serif;
+      font-size: 11px;
+      color: #555;
+      align-self: center;
+      line-height: 1.4;
+    }
+    .info-para {
+      font-family: 'Merriweather', serif;
+      font-size: 12px;
+      color: #444;
+      line-height: 1.7;
+      margin-bottom: 10px;
+    }
+
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: var(--light); }
     ::-webkit-scrollbar-thumb { background: #ccc; }
@@ -444,7 +488,9 @@
       </div>
       <div class="header-divider"></div>
       <a href="/history" class="nav-link">History</a>
-      <button class="refresh-btn" id="refreshBtn" onclick="triggerRefresh()">↻ Refresh</button>
+      <button class="header-btn" id="refreshBtn" onclick="triggerRefresh()">↻ Refresh</button>
+      <button class="header-btn" id="compactBtn" onclick="toggleCompact()">⊟ Compact</button>
+      <button class="header-btn" onclick="openInfo()">? Info</button>
       <select class="week-selector" id="weekSelector" onchange="changeWeek(this.value)">
         {% for w in weeks %}
         <option value="{{ w }}" {% if w == selected_week %}selected{% endif %}>{{ w }}</option>
@@ -467,15 +513,12 @@
   <div class="layout">
 
     <aside class="sidebar">
-
       <div class="sidebar-section">
         <div class="sidebar-label">Search</div>
         <input type="text" class="search-input" id="searchInput"
                placeholder="Search titles..." oninput="debounceLoad()">
       </div>
-
       <div class="sidebar-divider"></div>
-
       <div class="sidebar-section">
         <div class="sidebar-label">Sort by</div>
         <select class="sort-select" id="sortSelect" onchange="loadArticles()">
@@ -485,57 +528,38 @@
           <option value="score">AI Score</option>
         </select>
       </div>
-
       <div class="sidebar-divider"></div>
-
       <div class="sidebar-section">
         <div class="sidebar-label">Status</div>
         <div class="filter-group">
-          <button class="filter-btn active" onclick="setFilter('status', '', this)">
-            All <span class="filter-count" id="fcAll"></span>
-          </button>
-          <button class="filter-btn" onclick="setFilter('status', 'unreviewed', this)">
-            Unreviewed <span class="filter-count" id="fcUnreviewed"></span>
-          </button>
-          <button class="filter-btn" onclick="setFilter('status', 'selected', this)">
-            Selected <span class="filter-count" id="fcSelected"></span>
-          </button>
-          <button class="filter-btn" onclick="setFilter('status', 'maybe', this)">
-            Maybe <span class="filter-count" id="fcMaybe"></span>
-          </button>
-          <button class="filter-btn" onclick="setFilter('status', 'skip', this)">
-            Skip <span class="filter-count" id="fcSkip"></span>
-          </button>
+          <button class="filter-btn active" onclick="setFilter('status', '', this)">All <span class="filter-count" id="fcAll"></span></button>
+          <button class="filter-btn" onclick="setFilter('status', 'unreviewed', this)">Unreviewed <span class="filter-count" id="fcUnreviewed"></span></button>
+          <button class="filter-btn" onclick="setFilter('status', 'selected', this)">Selected <span class="filter-count" id="fcSelected"></span></button>
+          <button class="filter-btn" onclick="setFilter('status', 'maybe', this)">Maybe <span class="filter-count" id="fcMaybe"></span></button>
+          <button class="filter-btn" onclick="setFilter('status', 'skip', this)">Skip <span class="filter-count" id="fcSkip"></span></button>
         </div>
       </div>
-
       <div class="sidebar-divider"></div>
-
       <div class="sidebar-section">
         <div class="sidebar-label">Category</div>
         <div id="categoryFilters">
           <button class="filter-btn active" onclick="setFilter('category', '', this)">All</button>
         </div>
       </div>
-
       <div class="sidebar-divider"></div>
-
       <div class="sidebar-section">
         <div class="sidebar-label">Source</div>
         <div id="sourceFilters">
           <button class="filter-btn active" onclick="setFilter('source', '', this)">All</button>
         </div>
       </div>
-
       <div class="sidebar-divider"></div>
-
       <div class="sidebar-section">
         <div class="sidebar-label">Export Selected</div>
         <button class="export-btn" onclick="exportArticles('text', 'selected')">↓ Text — Selected</button>
         <button class="export-btn secondary" onclick="exportArticles('text', 'selected,maybe')">↓ Text — Selected + Maybe</button>
         <button class="export-btn secondary" onclick="exportArticles('csv', 'selected')">↓ CSV — Selected</button>
       </div>
-
     </aside>
 
     <main class="article-list" id="articleList">
@@ -544,15 +568,71 @@
 
   </div>
 
+  <!-- Info modal -->
+  <div class="modal-overlay" id="infoModal" onclick="closeInfoOnOverlay(event)">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">CITS Newsletter Curator — Guide</span>
+        <button class="modal-close" onclick="closeInfo()">✕</button>
+      </div>
+      <div class="modal-body">
+
+        <div class="modal-section-title">Overview</div>
+        <p class="info-para">The curator collects articles from the energy security RSS aggregator each week. Your job is to review each article and mark it as Selected, Maybe, or Skip. At the end of the week, export your selected articles as a plain text file to use as reference while writing the newsletter.</p>
+        <p class="info-para">Articles are grouped by category. Click a category header to collapse or expand it. Use the sidebar filters to narrow by status, category, or source. The week selector in the top right lets you review past weeks.</p>
+
+        <div class="modal-section-title">Keyboard Shortcuts</div>
+        <div class="shortcut-grid">
+          <span class="shortcut-key">↑ / ↓</span>
+          <span class="shortcut-desc">Move focus to previous / next article</span>
+          <span class="shortcut-key">S</span>
+          <span class="shortcut-desc">Mark focused article as Selected (press again to clear)</span>
+          <span class="shortcut-key">M</span>
+          <span class="shortcut-desc">Mark focused article as Maybe (press again to clear)</span>
+          <span class="shortcut-key">X</span>
+          <span class="shortcut-desc">Mark focused article as Skip (press again to clear)</span>
+          <span class="shortcut-key">Enter</span>
+          <span class="shortcut-desc">Open focused article in a new tab</span>
+          <span class="shortcut-key">C</span>
+          <span class="shortcut-desc">Toggle compact view (hides metadata, shows titles only)</span>
+          <span class="shortcut-key">?</span>
+          <span class="shortcut-desc">Open / close this guide</span>
+          <span class="shortcut-key">Esc</span>
+          <span class="shortcut-desc">Close this guide</span>
+        </div>
+        <p class="info-para" style="color:var(--gray); font-size:11px;">Shortcuts are disabled when the search box or week selector is focused.</p>
+
+        <div class="modal-section-title">Article Statuses</div>
+        <div class="shortcut-grid">
+          <span class="shortcut-key" style="background:#fff8f8; border-color:var(--red); color:var(--red);">Selected</span>
+          <span class="shortcut-desc">Article will be included in the export for newsletter writing</span>
+          <span class="shortcut-key" style="background:#fffbf0; border-color:#e0a800; color:#e0a800;">Maybe</span>
+          <span class="shortcut-desc">Possible inclusion — export with "Selected + Maybe" to review</span>
+          <span class="shortcut-key" style="background:#f5f5f5; border-color:#909090; color:#909090;">Skip</span>
+          <span class="shortcut-desc">Not relevant — article is dimmed but not deleted</span>
+        </div>
+
+        <div class="modal-section-title">Refresh &amp; Export</div>
+        <p class="info-para">Click <strong>↻ Refresh</strong> in the header to pull the latest articles from the aggregator (requires password). New articles appear within about 2 minutes. The aggregator also runs automatically every Friday at 10 AM ET.</p>
+        <p class="info-para">Use the export buttons in the sidebar to download your selections. <strong>Text — Selected</strong> produces a clean plain-text file organized by category, ready to use as a writing reference. <strong>CSV — Selected</strong> includes all metadata and AI summaries if available.</p>
+
+        <div class="modal-section-title">Summarize</div>
+        <p class="info-para">Each article has a <strong>⚡ Summarize</strong> button that fetches the full article text and generates a 2-sentence summary using AI. Summaries are cached — once generated they appear as a collapsible <strong>▶ Summary</strong> toggle on every future load. Paywalled articles will show a failure notice.</p>
+
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <script>
     let currentWeek = "{{ selected_week }}";
     let filters = { category: "", source: "", status: "" };
     let debounceTimer = null;
-
-    // Track collapsed state by group name, persisted across reloads
     let collapsedGroups = new Set();
+    let focusedIndex = -1;
+    let articleIds = [];
+    let isCompact = false;
 
     window.addEventListener("DOMContentLoaded", () => {
       loadFilters();
@@ -560,14 +640,19 @@
       loadStats();
     });
 
+    // ── Week ─────────────────────────────────────────────────────────────────
+
     function changeWeek(week) {
       currentWeek = week;
       filters = { category: "", source: "", status: "" };
       collapsedGroups.clear();
+      focusedIndex = -1;
       loadFilters();
       loadArticles();
       loadStats();
     }
+
+    // ── Filters ───────────────────────────────────────────────────────────────
 
     async function loadFilters() {
       const res = await fetch(`/api/filters?week=${currentWeek}`);
@@ -601,6 +686,8 @@
       loadArticles();
     }
 
+    // ── Articles ──────────────────────────────────────────────────────────────
+
     function debounceLoad() {
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(loadArticles, 300);
@@ -611,16 +698,14 @@
       const sort   = document.getElementById("sortSelect").value;
 
       const params = new URLSearchParams({
-        week:     currentWeek,
-        category: filters.category,
-        source:   filters.source,
-        status:   filters.status,
-        search,
-        sort,
+        week: currentWeek, category: filters.category,
+        source: filters.source, status: filters.status, search, sort,
       });
 
       const list = document.getElementById("articleList");
       list.innerHTML = `<div class="loading">Loading…</div>`;
+      focusedIndex = -1;
+      articleIds = [];
 
       const res = await fetch(`/api/articles?${params}`);
       const articles = await res.json();
@@ -630,6 +715,7 @@
         return;
       }
 
+      articleIds = articles.map(a => a.id);
       const sort_ = sort;
       let html = "";
       const canCollapse = (sort_ === "category" || sort_ === "score" || sort_ === "source");
@@ -658,7 +744,6 @@
 
       list.innerHTML = html;
 
-      // Set initial max-height for animation and restore collapsed state
       list.querySelectorAll(".category-articles").forEach(el => {
         const groupName = el.dataset.group;
         const naturalHeight = el.scrollHeight;
@@ -674,10 +759,8 @@
     function renderGroup(name, items, collapsible) {
       const isCollapsed = collapsedGroups.has(name);
       const chevron = collapsible
-        ? `<span class="category-chevron ${isCollapsed ? 'collapsed' : ''}">▼</span>`
-        : "";
+        ? `<span class="category-chevron ${isCollapsed ? 'collapsed' : ''}">▼</span>` : "";
       const clickHandler = collapsible ? `onclick="toggleGroup(this, '${escAttr(name)}')"` : "";
-
       return `
         <div class="category-group">
           <div class="category-header" ${clickHandler}>
@@ -696,15 +779,12 @@
       const articlesEl = headerEl.nextElementSibling;
       const chevron = headerEl.querySelector(".category-chevron");
       const isCollapsed = articlesEl.classList.contains("collapsed");
-
       if (isCollapsed) {
-        // Expand
         articlesEl.classList.remove("collapsed");
         articlesEl.style.maxHeight = articlesEl.scrollHeight + "px";
         chevron.classList.remove("collapsed");
         collapsedGroups.delete(groupName);
       } else {
-        // Collapse — set explicit height first so transition works
         articlesEl.style.maxHeight = articlesEl.scrollHeight + "px";
         requestAnimationFrame(() => {
           articlesEl.classList.add("collapsed");
@@ -723,9 +803,8 @@
         ? `<button class="summary-toggle" onclick="toggleSummary(this)">▶ Summary</button>
            <div class="summary-drawer">${escHtml(a.ai_summary)}</div>`
         : "";
-
       return `
-        <div class="article-item ${statusClass}" id="article-${a.id}">
+        <div class="article-item ${statusClass}" id="article-${a.id}" tabindex="-1">
           <div class="article-content">
             <a href="${a.url}" target="_blank" class="article-title">${escHtml(a.title)}</a>
             <div class="article-meta">
@@ -735,40 +814,38 @@
             </div>
             ${summary}
             ${note}
-            ${!a.ai_summary ? `<button class="summarize-btn" id="sum-btn-${a.id}" onclick="summarizeArticle(${a.id}, this)">⚡ Summarize</button><div class="summary-drawer" id="sum-drawer-${a.id}"></div>` : ""}
+            ${!a.ai_summary ? `<button class="summarize-btn" onclick="summarizeArticle(${a.id}, this)">⚡ Summarize</button>` : ""}
           </div>
           <div class="status-buttons">
-            <button class="status-btn ${a.status === 'selected' ? 'active-selected' : ''}"
-                    onclick="setStatus(${a.id}, 'selected')">✓ Select</button>
-            <button class="status-btn ${a.status === 'maybe' ? 'active-maybe' : ''}"
-                    onclick="setStatus(${a.id}, 'maybe')">? Maybe</button>
-            <button class="status-btn ${a.status === 'skip' ? 'active-skip' : ''}"
-                    onclick="setStatus(${a.id}, 'skip')">✕ Skip</button>
+            <button class="status-btn ${a.status === 'selected' ? 'active-selected' : ''}" onclick="setStatus(${a.id}, 'selected')">✓ Select</button>
+            <button class="status-btn ${a.status === 'maybe' ? 'active-maybe' : ''}" onclick="setStatus(${a.id}, 'maybe')">? Maybe</button>
+            <button class="status-btn ${a.status === 'skip' ? 'active-skip' : ''}" onclick="setStatus(${a.id}, 'skip')">✕ Skip</button>
           </div>
         </div>`;
     }
 
+    // ── Status ────────────────────────────────────────────────────────────────
+
     async function setStatus(id, newStatus) {
       const el = document.getElementById(`article-${id}`);
       const currentStatus = el.className.includes(`status-${newStatus}`) ? "unreviewed" : newStatus;
-
       const res = await fetch(`/api/articles/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: currentStatus }),
       });
       const updated = await res.json();
-
-      el.className = `article-item${updated.status !== "unreviewed" ? ` status-${updated.status}` : ""}`;
+      el.className = `article-item${updated.status !== "unreviewed" ? ` status-${updated.status}` : ""}${focusedIndex >= 0 && articleIds[focusedIndex] === id ? " focused" : ""}`;
       el.querySelectorAll(".status-btn").forEach(btn => { btn.className = "status-btn"; });
       if (updated.status !== "unreviewed") {
         const activeBtn = el.querySelector(`[onclick="setStatus(${id}, '${updated.status}')"]`);
         if (activeBtn) activeBtn.classList.add(`active-${updated.status}`);
       }
-
       loadStats();
       showToast(currentStatus === "unreviewed" ? "Cleared" : `Marked as ${currentStatus}`);
     }
+
+    // ── Stats ─────────────────────────────────────────────────────────────────
 
     async function loadStats() {
       const res = await fetch(`/api/stats?week=${currentWeek}`);
@@ -785,37 +862,117 @@
       document.getElementById("fcSkip").textContent         = data.by_status.skip        || 0;
     }
 
+    // ── Export ────────────────────────────────────────────────────────────────
+
     function exportArticles(fmt, status) {
       window.location.href = `/api/export?week=${currentWeek}&format=${fmt}&status=${encodeURIComponent(status)}`;
     }
 
-    function showToast(msg) {
-      const t = document.getElementById("toast");
-      t.textContent = msg;
-      t.classList.add("show");
-      setTimeout(() => t.classList.remove("show"), 1800);
+    // ── Compact view ──────────────────────────────────────────────────────────
+
+    function toggleCompact() {
+      isCompact = !isCompact;
+      document.body.classList.toggle("compact", isCompact);
+      const btn = document.getElementById("compactBtn");
+      btn.classList.toggle("active", isCompact);
+      btn.textContent = isCompact ? "⊟ Compact ✓" : "⊟ Compact";
     }
 
-    function escHtml(str) {
-      return String(str)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
+    // ── Keyboard navigation ───────────────────────────────────────────────────
+
+    function isInputFocused() {
+      const tag = document.activeElement.tagName;
+      return tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA";
     }
 
-    function escAttr(str) {
-      return String(str).replace(/'/g, "\\'");
+    function getFocusedEl() {
+      if (focusedIndex < 0 || focusedIndex >= articleIds.length) return null;
+      return document.getElementById(`article-${articleIds[focusedIndex]}`);
     }
+
+    function setFocus(index) {
+      const prev = getFocusedEl();
+      if (prev) prev.classList.remove("focused");
+      focusedIndex = Math.max(0, Math.min(index, articleIds.length - 1));
+      const el = getFocusedEl();
+      if (el) {
+        el.classList.add("focused");
+        el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
+    }
+
+    document.addEventListener("keydown", e => {
+      if (isInputFocused()) return;
+      if (document.getElementById("infoModal").classList.contains("open")) {
+        if (e.key === "Escape") closeInfo();
+        return;
+      }
+
+      switch (e.key) {
+        case "ArrowDown":
+        case "j":
+          e.preventDefault();
+          setFocus(focusedIndex < 0 ? 0 : focusedIndex + 1);
+          break;
+        case "ArrowUp":
+        case "k":
+          e.preventDefault();
+          setFocus(focusedIndex <= 0 ? 0 : focusedIndex - 1);
+          break;
+        case "s":
+        case "S":
+          if (focusedIndex >= 0) setStatus(articleIds[focusedIndex], "selected");
+          break;
+        case "m":
+        case "M":
+          if (focusedIndex >= 0) setStatus(articleIds[focusedIndex], "maybe");
+          break;
+        case "x":
+        case "X":
+          if (focusedIndex >= 0) setStatus(articleIds[focusedIndex], "skip");
+          break;
+        case "Enter":
+          if (focusedIndex >= 0) {
+            const el = getFocusedEl();
+            if (el) {
+              const link = el.querySelector(".article-title");
+              if (link) window.open(link.href, "_blank");
+            }
+          }
+          break;
+        case "c":
+        case "C":
+          toggleCompact();
+          break;
+        case "?":
+          openInfo();
+          break;
+        case "Escape":
+          closeInfo();
+          break;
+      }
+    });
+
+    // ── Info modal ────────────────────────────────────────────────────────────
+
+    function openInfo() {
+      document.getElementById("infoModal").classList.add("open");
+    }
+    function closeInfo() {
+      document.getElementById("infoModal").classList.remove("open");
+    }
+    function closeInfoOnOverlay(e) {
+      if (e.target === document.getElementById("infoModal")) closeInfo();
+    }
+
+    // ── Summarize ─────────────────────────────────────────────────────────────
 
     async function summarizeArticle(id, btn) {
       btn.disabled = true;
       btn.textContent = "Summarizing…";
-
       try {
         const res = await fetch(`/api/articles/${id}/summarize`, { method: "POST" });
         const data = await res.json();
-
         if (data.error) {
           btn.textContent = data.error;
           btn.disabled = true;
@@ -824,20 +981,15 @@
           btn.style.cursor = "default";
           return;
         }
-
-        // Replace button with toggle + drawer
         const toggle = document.createElement("button");
         toggle.className = "summary-toggle";
         toggle.textContent = "▼ Summary";
         toggle.onclick = () => toggleSummary(toggle);
-
         const drawer = document.createElement("div");
         drawer.className = "summary-drawer open";
         drawer.textContent = data.summary;
-
         btn.replaceWith(toggle);
         toggle.insertAdjacentElement("afterend", drawer);
-
       } catch (e) {
         btn.textContent = "Failed — retry";
         btn.disabled = false;
@@ -851,14 +1003,14 @@
       btn.textContent = open ? "▼ Summary" : "▶ Summary";
     }
 
+    // ── Refresh ───────────────────────────────────────────────────────────────
+
     async function triggerRefresh() {
       const password = prompt("Enter refresh password:");
       if (!password) return;
-
       const btn = document.getElementById("refreshBtn");
       btn.disabled = true;
       btn.textContent = "Refreshing…";
-
       try {
         const res = await fetch("/api/trigger-refresh", {
           method: "POST",
@@ -866,14 +1018,10 @@
           body: JSON.stringify({ password }),
         });
         const data = await res.json();
-
         if (res.ok) {
           btn.textContent = "✓ Triggered";
           showToast("Refresh started — articles will appear in ~2 minutes");
-          setTimeout(() => {
-            btn.disabled = false;
-            btn.textContent = "↻ Refresh";
-          }, 30000);
+          setTimeout(() => { btn.disabled = false; btn.textContent = "↻ Refresh"; }, 30000);
         } else {
           showToast(data.error || "Refresh failed");
           btn.disabled = false;
@@ -886,6 +1034,22 @@
       }
     }
 
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    function showToast(msg) {
+      const t = document.getElementById("toast");
+      t.textContent = msg;
+      t.classList.add("show");
+      setTimeout(() => t.classList.remove("show"), 1800);
+    }
+
+    function escHtml(str) {
+      return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    function escAttr(str) {
+      return String(str).replace(/'/g, "\\'");
+    }
   </script>
 </body>
 </html>
