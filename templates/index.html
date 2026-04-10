@@ -832,8 +832,8 @@
         <div class="modal-section-title">Refreshing</div>
         <p class="info-para">If new articles aren't showing up or you want to pull mid-week, hit <strong>↻ Refresh</strong>. It asks for a password and kicks off a new fetch — articles show up within about 2 minutes.</p>
 
-        <div class="modal-section-title">Summaries</div>
-        <p class="info-para">The <strong>⚡ Summarize</strong> button on each article fetches the full text and generates a 2-sentence summary. Once generated it's cached, so it'll show up as a collapsible <strong>▶ Summary</strong> on every load after that. Paywalled articles will fail gracefully with a notice.</p>
+        <div class="modal-section-title">Descriptions</div>
+        <p class="info-para">The <strong>↓ Pull description</strong> button on each article fetches the publisher's own description from the article page — no AI involved, just the meta description tag. Fast and accurate. Once pulled it's cached and shows as a collapsible <strong>▶ Description</strong> on every future load. Paywalled articles will show a notice if no description is available.</p>
 
       </div>
     </div>
@@ -1037,7 +1037,7 @@
       const score = a.ai_score ? `· Score ${a.ai_score}` : "";
       const note  = a.curator_note ? `<div class="article-note">${escHtml(a.curator_note)}</div>` : "";
       const summary = a.ai_summary
-        ? `<button class="summary-toggle" onclick="toggleSummary(this)">▶ Summary</button>
+        ? `<button class="summary-toggle" onclick="toggleSummary(this)">▶ Description</button>
            <div class="summary-drawer">${escHtml(a.ai_summary)}</div>`
         : "";
       return `
@@ -1052,7 +1052,7 @@
             </div>
             ${summary}
             ${note}
-            ${!a.ai_summary ? `<button class="summarize-btn" onclick="summarizeArticle(${a.id}, this)">⚡ Summarize</button>` : ""}
+            ${!a.ai_summary ? `<button class="summarize-btn" onclick="summarizeArticle(${a.id}, this)">↓ Pull description</button>` : ""}
           </div>
           <div class="status-buttons">
             <button class="status-btn ${a.status === 'selected' ? 'active-selected' : ''}" onclick="setStatus(${a.id}, 'selected')">✓ Select</button>
@@ -1220,7 +1220,7 @@
 
     async function summarizeArticle(id, btn) {
       btn.disabled = true;
-      btn.textContent = "Summarizing…";
+      btn.textContent = "Fetching…";
       try {
         const res = await fetch(`/api/articles/${id}/summarize`, { method: "POST" });
         const data = await res.json();
@@ -1234,7 +1234,7 @@
         }
         const toggle = document.createElement("button");
         toggle.className = "summary-toggle";
-        toggle.textContent = "▼ Summary";
+        toggle.textContent = "▼ Description";
         toggle.onclick = () => toggleSummary(toggle);
         const drawer = document.createElement("div");
         drawer.className = "summary-drawer open";
@@ -1251,7 +1251,7 @@
       const drawer = btn.nextElementSibling;
       if (!drawer) return;
       const open = drawer.classList.toggle("open");
-      btn.textContent = open ? "▼ Summary" : "▶ Summary";
+      btn.textContent = open ? "▼ Description" : "▶ Description";
     }
 
     // ── Refresh status indicator ──────────────────────────────────────────────
