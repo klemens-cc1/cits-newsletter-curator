@@ -97,6 +97,75 @@
     }
     .week-selector option { background: var(--charcoal); }
 
+    /* ── Refresh status indicator ── */
+    .refresh-indicator { position: relative; margin-left: auto; }
+    .refresh-pill {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 12px;
+      font-family: 'Oswald', sans-serif;
+      font-size: 11px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--gray);
+      background: none;
+      border: 1px solid #444;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .refresh-pill:hover { color: var(--white); border-color: #666; }
+    .refresh-pill.refreshing { color: #7eb8f7; border-color: #4a7aad; }
+    .refresh-pill.done { color: #6dbf7e; border-color: #3a8a4a; }
+    .refresh-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: #555; flex-shrink: 0; transition: background 0.2s;
+    }
+    .refresh-pill.refreshing .refresh-dot {
+      background: #7eb8f7;
+      animation: pulse-dot 1.2s ease-in-out infinite;
+    }
+    .refresh-pill.done .refresh-dot { background: #6dbf7e; }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.4; transform: scale(0.7); }
+    }
+    .refresh-dropdown {
+      display: none;
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      width: 300px;
+      background: var(--charcoal);
+      border: 1px solid #444;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+      z-index: 200;
+    }
+    .refresh-dropdown.open { display: block; }
+    .refresh-dropdown-header {
+      padding: 10px 14px;
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--gray);
+      border-bottom: 1px solid #444;
+    }
+    .refresh-log-item {
+      padding: 10px 14px;
+      border-bottom: 1px solid #333;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 2px 8px;
+    }
+    .refresh-log-item:last-child { border-bottom: none; }
+    .refresh-log-time { font-family: 'Oswald', sans-serif; font-size: 11px; color: var(--white); }
+    .refresh-log-trigger { font-family: 'Oswald', sans-serif; font-size: 10px; color: var(--gray); text-transform: uppercase; letter-spacing: 0.5px; text-align: right; }
+    .refresh-log-counts { font-family: 'Oswald', sans-serif; font-size: 10px; color: var(--gray); grid-column: 1 / -1; }
+    .refresh-log-counts .added { color: #6dbf7e; }
+    .refresh-empty { padding: 16px 14px; font-family: 'Oswald', sans-serif; font-size: 11px; color: var(--gray); text-align: center; letter-spacing: 1px; }
+
     /* ── Stats bar ── */
     .stats-bar {
       background: var(--white);
@@ -623,6 +692,16 @@
         {% endif %}
       </select>
     </div>
+    <div class="refresh-indicator" id="refreshIndicator">
+      <button class="refresh-pill" id="refreshPill" onclick="toggleRefreshDropdown()">
+        <span class="refresh-dot" id="refreshDot"></span>
+        <span id="refreshPillText">—</span>
+      </button>
+      <div class="refresh-dropdown" id="refreshDropdown">
+        <div class="refresh-dropdown-header">Refresh History</div>
+        <div id="refreshLogList"><div class="refresh-empty">Loading…</div></div>
+      </div>
+    </div>
   </header>
 
   <div class="stats-bar" id="statsBar">
@@ -775,6 +854,7 @@
       loadFilters();
       loadArticles();
       loadStats();
+      loadRefreshStatus();
     });
 
     // ── Week ─────────────────────────────────────────────────────────────────
@@ -1174,7 +1254,141 @@
       btn.textContent = open ? "▼ Summary" : "▶ Summary";
     }
 
-    // ── Refresh ───────────────────────────────────────────────────────────────
+    // ── Refresh status indicator ──────────────────────────────────────────────
+
+    let refreshBaseline = null;       // pushed_at of most recent log entry on load
+    let refreshPolling = null;        // setInterval handle
+    let refreshElapsed = null;        // setInterval for elapsed timer
+    let refreshElapsedSecs = 0;
+    const REFRESH_TIMEOUT_MS = 5 * 60 * 1000;
+    let refreshTimeoutHandle = null;
+
+    async function loadRefreshStatus() {
+      try {
+        const res = await fetch("/api/refresh-log?limit=5");
+        const logs = await res.json();
+        renderRefreshLog(logs);
+        if (logs.length > 0) {
+          refreshBaseline = logs[0].pushed_at;
+          setPillIdle(logs[0].pushed_at);
+        } else {
+          document.getElementById("refreshPillText").textContent = "No refreshes yet";
+        }
+      } catch (e) {
+        document.getElementById("refreshPillText").textContent = "—";
+      }
+    }
+
+    function setPillIdle(pushedAt) {
+      const pill = document.getElementById("refreshPill");
+      pill.className = "refresh-pill";
+      const ago = timeAgo(pushedAt);
+      document.getElementById("refreshPillText").textContent = `Last refresh: ${ago}`;
+    }
+
+    function setPillRefreshing() {
+      const pill = document.getElementById("refreshPill");
+      pill.className = "refresh-pill refreshing";
+      refreshElapsedSecs = 0;
+      updateElapsedText();
+      refreshElapsed = setInterval(() => {
+        refreshElapsedSecs++;
+        updateElapsedText();
+      }, 1000);
+    }
+
+    function updateElapsedText() {
+      const m = Math.floor(refreshElapsedSecs / 60);
+      const s = refreshElapsedSecs % 60;
+      const elapsed = m > 0 ? `${m}m ${s}s` : `${s}s`;
+      document.getElementById("refreshPillText").textContent = `Refreshing… ${elapsed}`;
+    }
+
+    function setPillDone(addedCount) {
+      clearInterval(refreshElapsed);
+      clearInterval(refreshPolling);
+      clearTimeout(refreshTimeoutHandle);
+      const pill = document.getElementById("refreshPill");
+      pill.className = "refresh-pill done";
+      document.getElementById("refreshPillText").textContent =
+        addedCount > 0 ? `✓ Done — ${addedCount} added` : "✓ Done";
+      setTimeout(() => {
+        loadRefreshStatus();
+        loadArticles();
+        loadStats();
+      }, 2500);
+    }
+
+    function setPillTimeout() {
+      clearInterval(refreshElapsed);
+      clearInterval(refreshPolling);
+      const pill = document.getElementById("refreshPill");
+      pill.className = "refresh-pill";
+      document.getElementById("refreshPillText").textContent = "Refresh may be complete — reload to check";
+    }
+
+    function startRefreshPolling() {
+      refreshPolling = setInterval(async () => {
+        try {
+          const res = await fetch("/api/refresh-log?limit=5");
+          const logs = await res.json();
+          if (logs.length > 0 && logs[0].pushed_at !== refreshBaseline) {
+            refreshBaseline = logs[0].pushed_at;
+            renderRefreshLog(logs);
+            setPillDone(logs[0].articles_added);
+          }
+        } catch (e) { /* keep polling */ }
+      }, 10000);
+
+      refreshTimeoutHandle = setTimeout(setPillTimeout, REFRESH_TIMEOUT_MS);
+    }
+
+    function renderRefreshLog(logs) {
+      const list = document.getElementById("refreshLogList");
+      if (!logs.length) {
+        list.innerHTML = `<div class="refresh-empty">No refresh history</div>`;
+        return;
+      }
+      list.innerHTML = logs.map(log => {
+        const t = new Date(log.pushed_at);
+        const dateStr = t.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        const timeStr = t.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+        const trigger = log.triggered_by === "manual" ? "Manual" : "Auto";
+        const added = log.articles_added || 0;
+        const skipped = log.articles_skipped || 0;
+        return `
+          <div class="refresh-log-item">
+            <span class="refresh-log-time">${dateStr} · ${timeStr}</span>
+            <span class="refresh-log-trigger">${trigger}</span>
+            <span class="refresh-log-counts">
+              <span class="added">+${added} added</span> · ${skipped} skipped
+            </span>
+          </div>`;
+      }).join("");
+    }
+
+    function toggleRefreshDropdown() {
+      const dd = document.getElementById("refreshDropdown");
+      dd.classList.toggle("open");
+    }
+
+    document.addEventListener("click", e => {
+      const indicator = document.getElementById("refreshIndicator");
+      if (indicator && !indicator.contains(e.target)) {
+        document.getElementById("refreshDropdown").classList.remove("open");
+      }
+    });
+
+    function timeAgo(isoString) {
+      if (!isoString) return "—";
+      const diff = Math.floor((Date.now() - new Date(isoString).getTime()) / 1000);
+      if (diff < 60) return "just now";
+      if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+      if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+      return `${Math.floor(diff / 86400)}d ago`;
+    }
+
+    // ── Refresh (trigger) ────────────────────────────────────────────────────
 
     async function triggerRefresh() {
       const password = prompt("Enter refresh password:");
@@ -1192,6 +1406,8 @@
         if (res.ok) {
           btn.textContent = "✓ Triggered";
           showToast("Refresh started — articles will appear in ~2 minutes");
+          setPillRefreshing();
+          startRefreshPolling();
           setTimeout(() => { btn.disabled = false; btn.textContent = "↻ Refresh"; }, 30000);
         } else {
           showToast(data.error || "Refresh failed");
