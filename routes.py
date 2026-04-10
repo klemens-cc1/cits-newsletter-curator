@@ -1,6 +1,8 @@
 import csv
 import io
 import os
+import re
+import html as html_lib
 from datetime import datetime, timezone
 
 import requests as req_lib
@@ -242,7 +244,7 @@ def export():
             if a.curator_note:
                 lines.append(f"Note: {a.curator_note}")
             if a.ai_summary:
-                lines.append(f"Summary: {a.ai_summary}")
+                lines.append(f"Description: {a.ai_summary}")
             lines.append("")
         return Response(
             "\n".join(lines),
@@ -252,7 +254,7 @@ def export():
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["title", "url", "feed_name", "category", "published_at", "status", "curator_note", "ai_summary"])
+    writer.writerow(["title", "url", "feed_name", "category", "published_at", "status", "curator_note", "description"])
     for a in articles:
         writer.writerow([
             a.title, a.url, a.feed_name, a.category,
@@ -292,82 +294,47 @@ def filters():
     })
 
 
-# ── On-demand summarization ───────────────────────────────────────────────────
+# ── Article description fetcher ───────────────────────────────────────────────
 
-def fetch_article_text(url: str, max_chars: int = 4000) -> str:
-    """Fetch and extract main text from an article URL."""
+def fetch_article_description(url: str) -> str:
+    """Pull meta description or first substantive paragraph — no AI needed."""
     try:
-        import html
-        import re
-
         resp = req_lib.get(
             url,
             headers={
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 "Accept": "text/html,application/xhtml+xml",
             },
-            timeout=10,
+            timeout=8,
         )
         raw = resp.text
 
-        raw = re.sub(r"<(script|style|nav|footer|header|aside)[^>]*>.*?</\1>", " ", raw, flags=re.DOTALL | re.IGNORECASE)
-        text = re.sub(r"<[^>]+>", " ", raw)
-        text = html.unescape(text)
-        text = re.sub(r"\s+", " ", text).strip()
-        # Require at least 300 chars — less is likely a paywall/redirect page
-        if len(text) < 300:
-            return ""
-        return text[:max_chars]
+        # 1. <meta name="description"> — try both attribute orderings
+        m = re.search(r'<meta[^>]+name=["\']description["\'][^>]+content=["\']([^"\']{30,})["\']', raw, re.IGNORECASE)
+        if not m:
+            m = re.search(r'<meta[^>]+content=["\']([^"\']{30,})["\'][^>]+name=["\']description["\']', raw, re.IGNORECASE)
+
+        # 2. <meta property="og:description">
+        if not m:
+            m = re.search(r'<meta[^>]+property=["\']og:description["\'][^>]+content=["\']([^"\']{30,})["\']', raw, re.IGNORECASE)
+        if not m:
+            m = re.search(r'<meta[^>]+content=["\']([^"\']{30,})["\'][^>]+property=["\']og:description["\']', raw, re.IGNORECASE)
+
+        if m:
+            return html_lib.unescape(m.group(1).strip())
+
+        # 3. First substantive <p> tag as fallback
+        paragraphs = re.findall(r'<p[^>]*>(.*?)</p>', raw, re.DOTALL | re.IGNORECASE)
+        for p in paragraphs:
+            text = re.sub(r'<[^>]+>', '', p)
+            text = html_lib.unescape(text).strip()
+            text = re.sub(r'\s+', ' ', text)
+            if len(text) > 100:
+                return text[:300]
+
+        return ""
     except Exception:
         return ""
-
-
-def summarize_with_groq(title: str, source: str, body: str) -> str:
-    """Call Groq API to generate a 2-sentence summary."""
-    api_key = os.environ.get("GROQ_API_KEY", "")
-    if not api_key:
-        raise ValueError("GROQ_API_KEY not set in environment")
-
-    if body:
-        prompt = (
-            f"Article title: {title}\n"
-            f"Source: {source}\n\n"
-            f"Article text (excerpt):\n{body}\n\n"
-            f"Write a 2-sentence summary of this article focused on the key policy, "
-            f"energy security, or geopolitical implications. Be specific and factual. "
-            f"Do not start with 'This article' or 'The article'. "
-            f"If the text appears to be a login page, paywall, cookie notice, or does not contain "
-            f"readable article content, respond only with the exact word: PAYWALL"
-        )
-    else:
-        prompt = (
-            f"Article title: {title}\n"
-            f"Source: {source}\n\n"
-            f"Based on this headline, write a 2-sentence summary of what this article "
-            f"likely covers, focused on energy security or geopolitical context."
-        )
-
-    resp = req_lib.post(
-        "https://api.groq.com/openai/v1/chat/completions",
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}",
-        },
-        json={
-            "model": "llama-3.1-8b-instant",
-            "max_tokens": 120,
-            "messages": [{"role": "user", "content": prompt}],
-        },
-        timeout=15,
-    )
-
-    if not resp.ok:
-        raise ValueError(f"Groq HTTP {resp.status_code}: {resp.text}")
-
-    result = resp.json()["choices"][0]["message"]["content"].strip()
-    if result.upper().startswith("PAYWALL"):
-        return "__PAYWALL__"
-    return result
 
 
 @bp.route("/api/articles/<int:article_id>/summarize", methods=["POST"])
@@ -377,29 +344,20 @@ def summarize_article(article_id):
     if article.ai_summary:
         return jsonify({"summary": article.ai_summary, "cached": True})
 
-    try:
-        body = fetch_article_text(article.url)
-        if not body:
-            return jsonify({"error": "Summarization Failed: Article Paywall or Javascript error"}), 500
+    description = fetch_article_description(article.url)
 
-        summary = summarize_with_groq(article.title, article.feed_name, body)
+    if not description:
+        return jsonify({"error": "No description found"}), 500
 
-        if not summary or summary == "__PAYWALL__":
-            return jsonify({"error": "Summarization Failed: Article Paywall or Javascript error"}), 500
-
-        article.ai_summary = summary
-        db.session.commit()
-        return jsonify({"summary": summary, "cached": False, "used_body": bool(body)})
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    article.ai_summary = description
+    db.session.commit()
+    return jsonify({"summary": description, "cached": False})
 
 
 # ── Trigger aggregator refresh ───────────────────────────────────────────────
 
 @bp.route("/api/trigger-refresh", methods=["POST"])
 def trigger_refresh():
-    # Verify refresh password
     data = request.get_json() or {}
     password = data.get("password", "")
     expected = os.environ.get("REFRESH_PASSWORD", "")
@@ -409,7 +367,6 @@ def trigger_refresh():
     if password != expected:
         return jsonify({"error": "Invalid password"}), 403
 
-    # Trigger GitHub Actions workflow dispatch
     github_token = os.environ.get("GITHUB_PAT", "")
     if not github_token:
         return jsonify({"error": "GITHUB_PAT not configured"}), 500
@@ -441,15 +398,3 @@ def debug_env():
         "key_prefix": key[:8] if key != "NOT SET" else "NOT SET",
         "key_length": len(key) if key != "NOT SET" else 0,
     })
-
-
-@bp.route("/api/debug/summarize/<int:article_id>", methods=["POST"])
-def debug_summarize(article_id):
-    import traceback
-    article = Article.query.get_or_404(article_id)
-    try:
-        body = fetch_article_text(article.url)
-        summary = summarize_with_groq(article.title, article.feed_name, body)
-        return jsonify({"summary": summary, "body_length": len(body)})
-    except Exception as e:
-        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
