@@ -258,16 +258,139 @@
     .article-item.status-skip     { background: var(--skip);    opacity: 0.55; }
     .article-item.status-selected.focused { box-shadow: inset 3px 0 0 #4a90e2; }
 
-    /* ── Compact mode ── */
-    body.compact .article-meta { display: none; }
-    body.compact .article-note { display: none; }
-    body.compact .summarize-btn { display: none; }
-    body.compact .summary-toggle { display: none; }
-    body.compact .summary-drawer { display: none !important; }
-    body.compact .article-item { padding: 8px 28px; }
-    body.compact .article-item.status-selected,
-    body.compact .article-item.status-maybe { padding-left: 25px; }
-    body.compact .article-title { font-size: 12px; margin-bottom: 0; }
+    /* ── Triage / compact mode ── */
+    body.compact .article-meta    { display: none; }
+    body.compact .article-note    { display: none; }
+    body.compact .summarize-btn   { display: none; }
+    body.compact .summary-toggle  { display: none; }
+    body.compact .summary-drawer  { display: none !important; }
+
+    body.compact .article-item {
+      padding: 0;
+      gap: 0;
+      align-items: stretch;
+    }
+    body.compact .article-item.status-selected { padding-left: 0; border-left: 3px solid var(--red); }
+    body.compact .article-item.status-maybe    { padding-left: 0; border-left: 3px solid #e0a800; }
+
+    body.compact .article-content {
+      padding: 8px 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    body.compact .article-title {
+      font-size: 12px;
+      margin-bottom: 2px;
+      line-height: 1.5;
+    }
+
+    /* inline source label — only visible in triage mode */
+    .article-source-inline {
+      display: none;
+    }
+    body.compact .article-source-inline {
+      display: block;
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      color: var(--gray);
+      letter-spacing: 0.3px;
+      margin-top: 1px;
+    }
+
+    body.compact .status-buttons {
+      flex-direction: row;
+      align-self: stretch;
+      gap: 0;
+      flex-shrink: 0;
+      border-left: 1px solid var(--border);
+      margin-left: auto;
+    }
+    body.compact .status-btn {
+      height: 100%;
+      min-height: 40px;
+      padding: 0 11px;
+      border: none;
+      border-left: 1px solid var(--border);
+      border-radius: 0;
+      font-size: 11px;
+      letter-spacing: 0;
+      background: var(--white);
+    }
+    body.compact .status-btn:first-child { border-left: none; }
+    body.compact .status-btn:hover { background: var(--light); }
+    body.compact .status-btn.active-selected { background: rgba(186,12,47,0.1); color: var(--red); border-color: transparent; }
+    body.compact .status-btn.active-maybe    { background: rgba(224,168,0,0.1); color: #b8860b; border-color: transparent; }
+    body.compact .status-btn.active-skip     { background: rgba(144,144,144,0.1); color: var(--gray); border-color: transparent; }
+
+    /* ── Triage progress bar ── */
+    .triage-progress {
+      display: none;
+      background: var(--charcoal);
+      padding: 7px 28px;
+      align-items: center;
+      gap: 14px;
+      border-bottom: 1px solid #333;
+      position: sticky;
+      top: 0;
+      z-index: 9;
+    }
+    body.compact .triage-progress { display: flex; }
+    .triage-progress-label {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--gray);
+      white-space: nowrap;
+    }
+    .triage-progress-track {
+      flex: 1;
+      height: 4px;
+      background: #444;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .triage-progress-fill {
+      height: 100%;
+      background: var(--red);
+      border-radius: 2px;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+    .triage-progress-count {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      color: var(--gray);
+      white-space: nowrap;
+    }
+    .triage-progress-count span { color: var(--red); font-weight: 500; }
+
+    /* ── Triage hint bar ── */
+    .triage-hint {
+      display: none;
+      padding: 7px 28px;
+      background: #1e1e1e;
+      border-top: 1px solid #333;
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 0.5px;
+      color: #555;
+      text-align: center;
+      position: sticky;
+      bottom: 0;
+      z-index: 9;
+    }
+    body.compact .triage-hint { display: block; }
+    .triage-hint kbd {
+      font-family: 'Oswald', sans-serif;
+      font-size: 9px;
+      background: #2e2e2e;
+      border: 1px solid #444;
+      padding: 1px 5px;
+      border-radius: 2px;
+      color: #888;
+    }
 
     .article-content { flex: 1; min-width: 0; }
     .article-title {
@@ -489,7 +612,7 @@
       <div class="header-divider"></div>
       <a href="/history" class="nav-link">History</a>
       <button class="header-btn" id="refreshBtn" onclick="triggerRefresh()">↻ Refresh</button>
-      <button class="header-btn" id="compactBtn" onclick="toggleCompact()">⊟ Compact</button>
+      <button class="header-btn" id="compactBtn" onclick="toggleCompact()">⊟ Triage</button>
       <button class="header-btn" onclick="openInfo()">? Info</button>
       <select class="week-selector" id="weekSelector" onchange="changeWeek(this.value)">
         {% for w in weeks %}
@@ -563,7 +686,17 @@
     </aside>
 
     <main class="article-list" id="articleList">
+      <div class="triage-progress" id="triageProgress">
+        <span class="triage-progress-label">Progress</span>
+        <div class="triage-progress-track">
+          <div class="triage-progress-fill" id="triageProgressFill"></div>
+        </div>
+        <span class="triage-progress-count"><span id="triageReviewed">0</span> / <span id="triageTotal">0</span> reviewed</span>
+      </div>
       <div class="loading">Loading articles…</div>
+      <div class="triage-hint">
+        <kbd>↑↓</kbd> navigate &nbsp;·&nbsp; <kbd>S</kbd> select &nbsp;·&nbsp; <kbd>M</kbd> maybe &nbsp;·&nbsp; <kbd>X</kbd> skip &nbsp;·&nbsp; <kbd>Enter</kbd> open link &nbsp;·&nbsp; <kbd>C</kbd> exit triage
+      </div>
     </main>
 
   </div>
@@ -594,7 +727,7 @@
           <span class="shortcut-key">Enter</span>
           <span class="shortcut-desc">Open focused article in a new tab</span>
           <span class="shortcut-key">C</span>
-          <span class="shortcut-desc">Toggle compact view (hides metadata, shows titles only)</span>
+          <span class="shortcut-desc">Toggle triage mode (compact rows with progress meter)</span>
           <span class="shortcut-key">?</span>
           <span class="shortcut-desc">Open / close this guide</span>
           <span class="shortcut-key">Esc</span>
@@ -611,6 +744,9 @@
           <span class="shortcut-key" style="background:#f5f5f5; border-color:#909090; color:#909090;">Skip</span>
           <span class="shortcut-desc">Not relevant — article is dimmed but not deleted</span>
         </div>
+
+        <div class="modal-section-title">Triage Mode</div>
+        <p class="info-para">Click <strong>⊟ Triage</strong> (or press <strong>C</strong>) to switch to a compact view optimised for fast reviewing. Each article shows as a single tight row with the title, source, and inline ✓ ? ✕ buttons. A progress bar tracks how many articles you've reviewed. All keyboard shortcuts still work. Press <strong>C</strong> again to return to normal view.</p>
 
         <div class="modal-section-title">Refresh &amp; Export</div>
         <p class="info-para">Click <strong>↻ Refresh</strong> in the header to pull the latest articles from the aggregator (requires password). New articles appear within about 2 minutes. The aggregator also runs automatically every Friday at 10 AM ET.</p>
@@ -703,15 +839,27 @@
       });
 
       const list = document.getElementById("articleList");
-      list.innerHTML = `<div class="loading">Loading…</div>`;
+      // preserve progress bar and hint when clearing
+      const progress = document.getElementById("triageProgress");
+      const hint = list.querySelector(".triage-hint");
+      list.innerHTML = "";
+      list.appendChild(progress);
+      list.insertAdjacentHTML("beforeend", `<div class="loading">Loading…</div>`);
+      if (hint) list.appendChild(hint);
+
       focusedIndex = -1;
       articleIds = [];
 
       const res = await fetch(`/api/articles?${params}`);
       const articles = await res.json();
 
+      // clear loading msg but keep progress + hint
+      list.innerHTML = "";
+      list.appendChild(progress);
+
       if (!articles.length) {
-        list.innerHTML = `<div class="empty">No articles found</div>`;
+        list.insertAdjacentHTML("beforeend", `<div class="empty">No articles found</div>`);
+        if (hint) list.appendChild(hint);
         return;
       }
 
@@ -742,7 +890,13 @@
         articles.forEach(a => { html += renderArticle(a); });
       }
 
-      list.innerHTML = html;
+      list.insertAdjacentHTML("beforeend", html);
+
+      // re-append hint at bottom
+      const hintEl = document.createElement("div");
+      hintEl.className = "triage-hint";
+      hintEl.innerHTML = `<kbd>↑↓</kbd> navigate &nbsp;·&nbsp; <kbd>S</kbd> select &nbsp;·&nbsp; <kbd>M</kbd> maybe &nbsp;·&nbsp; <kbd>X</kbd> skip &nbsp;·&nbsp; <kbd>Enter</kbd> open link &nbsp;·&nbsp; <kbd>C</kbd> exit triage`;
+      list.appendChild(hintEl);
 
       list.querySelectorAll(".category-articles").forEach(el => {
         const groupName = el.dataset.group;
@@ -754,6 +908,8 @@
           if (chevron) chevron.classList.add("collapsed");
         }
       });
+
+      if (isCompact) updateTriageProgress();
     }
 
     function renderGroup(name, items, collapsible) {
@@ -807,6 +963,7 @@
         <div class="article-item ${statusClass}" id="article-${a.id}" tabindex="-1">
           <div class="article-content">
             <a href="${a.url}" target="_blank" class="article-title">${escHtml(a.title)}</a>
+            <span class="article-source-inline">${escHtml(a.feed_name)}</span>
             <div class="article-meta">
               <span class="article-source">${escHtml(a.feed_name)}</span>
               ${pub ? `<span>${pub}</span>` : ""}
@@ -843,6 +1000,7 @@
       }
       loadStats();
       showToast(currentStatus === "unreviewed" ? "Cleared" : `Marked as ${currentStatus}`);
+      if (isCompact) updateTriageProgress();
     }
 
     // ── Stats ─────────────────────────────────────────────────────────────────
@@ -868,14 +1026,26 @@
       window.location.href = `/api/export?week=${currentWeek}&format=${fmt}&status=${encodeURIComponent(status)}`;
     }
 
-    // ── Compact view ──────────────────────────────────────────────────────────
+    // ── Triage / compact mode ─────────────────────────────────────────────────
 
     function toggleCompact() {
       isCompact = !isCompact;
       document.body.classList.toggle("compact", isCompact);
       const btn = document.getElementById("compactBtn");
       btn.classList.toggle("active", isCompact);
-      btn.textContent = isCompact ? "⊟ Compact ✓" : "⊟ Compact";
+      btn.textContent = isCompact ? "⊟ Triage ✓" : "⊟ Triage";
+      if (isCompact) updateTriageProgress();
+    }
+
+    function updateTriageProgress() {
+      const total = articleIds.length;
+      const reviewed = document.querySelectorAll(
+        ".article-item.status-selected, .article-item.status-maybe, .article-item.status-skip"
+      ).length;
+      document.getElementById("triageTotal").textContent = total;
+      document.getElementById("triageReviewed").textContent = reviewed;
+      const pct = total > 0 ? Math.round((reviewed / total) * 100) : 0;
+      document.getElementById("triageProgressFill").style.width = pct + "%";
     }
 
     // ── Keyboard navigation ───────────────────────────────────────────────────
