@@ -796,7 +796,7 @@
     currentSessionId = id;
     document.getElementById('detail-topic').textContent = topic;
     document.getElementById('session-list-view').style.display = 'none';
-    document.getElementById('session-detail-view').style.display = '';
+    document.getElementById('session-detail-view').style.display = 'block';
     document.getElementById('import-textarea').value = '';
     currentFilter = 'all';
     document.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b.dataset.filter === 'all'));
