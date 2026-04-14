@@ -1,5 +1,5 @@
 from app import db
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class Article(db.Model):
@@ -61,4 +61,52 @@ class RefreshLog(db.Model):
             "triggered_by":     self.triggered_by,
             "pushed_at":        self.pushed_at.isoformat() if self.pushed_at else None,
             "note":             self.note,
+        }
+
+
+class ResearchSession(db.Model):
+    __tablename__ = "research_sessions"
+
+    id         = db.Column(db.Integer, primary_key=True)
+    topic      = db.Column(db.Text, nullable=False)
+    owner      = db.Column(db.String(128), nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    articles = db.relationship("ResearchArticle", backref="session",
+                               lazy=True, cascade="all, delete-orphan")
+
+    def to_dict(self):
+        return {
+            "id":         self.id,
+            "topic":      self.topic,
+            "owner":      self.owner,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "article_count": len(self.articles),
+        }
+
+
+class ResearchArticle(db.Model):
+    __tablename__ = "research_articles"
+
+    id              = db.Column(db.Integer, primary_key=True)
+    session_id      = db.Column(db.Integer, db.ForeignKey("research_sessions.id"), nullable=False)
+    url             = db.Column(db.Text, nullable=False)
+    title           = db.Column(db.Text, nullable=True)
+    description     = db.Column(db.Text, nullable=True)
+    relevance_score = db.Column(db.Integer, nullable=True)
+    status          = db.Column(db.String(20), default="unreviewed")
+    curator_note    = db.Column(db.Text, nullable=True)
+    created_at      = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    def to_dict(self):
+        return {
+            "id":              self.id,
+            "session_id":      self.session_id,
+            "url":             self.url,
+            "title":           self.title,
+            "description":     self.description,
+            "relevance_score": self.relevance_score,
+            "status":          self.status,
+            "curator_note":    self.curator_note,
+            "created_at":      self.created_at.isoformat() if self.created_at else None,
         }

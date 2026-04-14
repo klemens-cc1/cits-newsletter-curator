@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 import requests as req_lib
 from flask import Blueprint, jsonify, render_template, request, Response
 from app import db
-from models import Article, RefreshLog
+from models import Article, RefreshLog, ResearchSession, ResearchArticle
 
 bp = Blueprint("main", __name__)
 
@@ -386,6 +386,247 @@ def trigger_refresh():
         return jsonify({"status": "triggered", "message": "Refresh started — new articles will appear in ~2 minutes"})
     else:
         return jsonify({"error": f"GitHub API error {resp.status_code}: {resp.text}"}), 500
+
+
+# ── Research page ─────────────────────────────────────────────────────────────
+
+@bp.route("/research")
+def research():
+    return render_template("research.html")
+
+
+# ── Research sessions API ──────────────────────────────────────────────────────
+
+@bp.route("/api/research/sessions", methods=["GET"])
+def list_research_sessions():
+    sessions = (
+        ResearchSession.query
+        .order_by(ResearchSession.created_at.desc())
+        .all()
+    )
+    result = []
+    for s in sessions:
+        d = s.to_dict()
+        d["selected"] = sum(1 for a in s.articles if a.status == "selected")
+        result.append(d)
+    return jsonify(result)
+
+
+@bp.route("/api/research/sessions", methods=["POST"])
+def create_research_session():
+    data = request.get_json() or {}
+    topic = (data.get("topic") or "").strip()
+    if not topic:
+        return jsonify({"error": "topic is required"}), 400
+    session = ResearchSession(topic=topic, owner=data.get("owner", "").strip() or None)
+    db.session.add(session)
+    db.session.commit()
+    return jsonify(session.to_dict()), 201
+
+
+@bp.route("/api/research/sessions/<int:session_id>", methods=["GET"])
+def get_research_session(session_id):
+    session = ResearchSession.query.get_or_404(session_id)
+    d = session.to_dict()
+    d["articles"] = [a.to_dict() for a in
+                     sorted(session.articles, key=lambda a: (a.relevance_score or 0), reverse=True)]
+    return jsonify(d)
+
+
+@bp.route("/api/research/sessions/<int:session_id>", methods=["DELETE"])
+def delete_research_session(session_id):
+    session = ResearchSession.query.get_or_404(session_id)
+    db.session.delete(session)
+    db.session.commit()
+    return jsonify({"deleted": session_id})
+
+
+# ── Research article import ────────────────────────────────────────────────────
+
+def score_article_for_topic(topic: str, title: str, description: str) -> int:
+    """Score an article 1-10 for relevance to the given topic using Groq."""
+    groq_key = os.environ.get("GROQ_API_KEY", "")
+    if not groq_key:
+        return 5
+
+    prompt = f"""You are a research assistant scoring articles for relevance to a policy research topic.
+
+Topic: {topic}
+
+Article title: {title}
+Article description: {description}
+
+Score this article's relevance to the topic from 1 to 10 using these guidelines:
+
+HIGH score (7-10):
+- Directly addresses the topic, key actors, or policy frameworks involved
+- Contains substantive analysis, data, or policy developments related to the topic
+- Written by a credible think tank, government body, academic, or specialist outlet
+
+LOW score (1-4):
+- Only tangentially mentions the topic
+- Primarily about something else that happens to share a keyword
+- Community news, events, or business/finance coverage unrelated to the policy dimension
+- Opinion/editorial with no substantive policy content
+
+Respond with ONLY a single integer from 1 to 10. No explanation."""
+
+    try:
+        resp = req_lib.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {groq_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "llama-3.3-70b-versatile",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 5,
+                "temperature": 0,
+            },
+            timeout=15,
+        )
+        text = resp.json()["choices"][0]["message"]["content"].strip()
+        score = int(re.search(r"\d+", text).group())
+        return max(1, min(10, score))
+    except Exception:
+        return 5
+
+
+@bp.route("/api/research/sessions/<int:session_id>/import", methods=["POST"])
+def import_research_urls(session_id):
+    session = ResearchSession.query.get_or_404(session_id)
+    data = request.get_json() or {}
+    raw = data.get("urls", "")
+    urls = [u.strip() for u in raw.splitlines() if u.strip().startswith("http")]
+
+    if not urls:
+        return jsonify({"error": "No valid URLs found"}), 400
+
+    added = []
+    skipped = 0
+    for url in urls:
+        existing = ResearchArticle.query.filter_by(session_id=session_id, url=url).first()
+        if existing:
+            skipped += 1
+            continue
+
+        title = ""
+        description = fetch_article_description(url)
+
+        # Try to extract title from the page
+        try:
+            resp = req_lib.get(
+                url,
+                headers={"User-Agent": "Mozilla/5.0"},
+                timeout=8,
+            )
+            m = re.search(r'<title[^>]*>(.*?)</title>', resp.text, re.IGNORECASE | re.DOTALL)
+            if m:
+                title = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', '', m.group(1))).strip()
+                title = html_lib.unescape(title)[:255]
+        except Exception:
+            pass
+
+        score = score_article_for_topic(session.topic, title, description)
+
+        article = ResearchArticle(
+            session_id=session_id,
+            url=url,
+            title=title or url,
+            description=description,
+            relevance_score=score,
+            status="unreviewed",
+        )
+        db.session.add(article)
+        added.append(article)
+
+    db.session.commit()
+    return jsonify({
+        "added": len(added),
+        "skipped": skipped,
+        "articles": [a.to_dict() for a in added],
+    })
+
+
+# ── Research article annotation ────────────────────────────────────────────────
+
+@bp.route("/api/research/articles/<int:article_id>", methods=["PATCH"])
+def update_research_article(article_id):
+    article = ResearchArticle.query.get_or_404(article_id)
+    data = request.get_json() or {}
+    if "status" in data:
+        article.status = data["status"]
+    if "curator_note" in data:
+        article.curator_note = data["curator_note"]
+    db.session.commit()
+    return jsonify(article.to_dict())
+
+
+@bp.route("/api/research/articles/<int:article_id>", methods=["DELETE"])
+def delete_research_article(article_id):
+    article = ResearchArticle.query.get_or_404(article_id)
+    db.session.delete(article)
+    db.session.commit()
+    return jsonify({"deleted": article_id})
+
+
+# ── Research export ────────────────────────────────────────────────────────────
+
+@bp.route("/api/research/sessions/<int:session_id>/export")
+def export_research_session(session_id):
+    session = ResearchSession.query.get_or_404(session_id)
+    fmt = request.args.get("format", "markdown")
+    status_filter = request.args.get("status", "selected")
+    statuses = [s.strip() for s in status_filter.split(",")]
+
+    articles = [a for a in session.articles if a.status in statuses]
+    articles.sort(key=lambda a: (a.relevance_score or 0), reverse=True)
+
+    safe_topic = re.sub(r'[^\w\s-]', '', session.topic)[:40].strip().replace(' ', '-').lower()
+
+    if fmt == "csv":
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["title", "url", "relevance_score", "status", "description", "curator_note"])
+        for a in articles:
+            writer.writerow([
+                a.title or "", a.url, a.relevance_score or "",
+                a.status, a.description or "", a.curator_note or "",
+            ])
+        output.seek(0)
+        return Response(
+            output.getvalue(),
+            mimetype="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=research-{safe_topic}.csv"},
+        )
+
+    # Markdown / plain text research pack
+    lines = [
+        f"# Research Pack: {session.topic}",
+        f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d')}",
+        f"Articles: {len(articles)}",
+        "",
+        "---",
+        "",
+    ]
+    for a in articles:
+        lines.append(f"## {a.title or a.url}")
+        lines.append(f"**Source:** {a.url}")
+        if a.relevance_score:
+            lines.append(f"**Relevance score:** {a.relevance_score}/10")
+        if a.description:
+            lines.append(f"**Description:** {a.description}")
+        if a.curator_note:
+            lines.append(f"**Note:** {a.curator_note}")
+        lines.append("")
+
+    ext = "md" if fmt == "markdown" else "txt"
+    return Response(
+        "\n".join(lines),
+        mimetype="text/plain",
+        headers={"Content-Disposition": f"attachment; filename=research-{safe_topic}.{ext}"},
+    )
 
 
 # ── Debug endpoints (remove after troubleshooting) ────────────────────────────
