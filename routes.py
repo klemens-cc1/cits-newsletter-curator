@@ -896,7 +896,8 @@ def run_research_search(app, job_id: int, session_id: int, topic: str):
 
 @bp.route("/api/research/sessions/<int:session_id>/search", methods=["POST"])
 def start_research_search(session_id):
-    from app import app as flask_app
+    from flask import current_app
+    flask_app = current_app._get_current_object()
     ResearchSession.query.get_or_404(session_id)
 
     # Block duplicate concurrent jobs
