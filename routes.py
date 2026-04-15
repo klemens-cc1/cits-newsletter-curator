@@ -3,12 +3,15 @@ import io
 import os
 import re
 import html as html_lib
+import threading
+import urllib.parse
 from datetime import datetime, timezone
 
+import feedparser as fp_lib
 import requests as req_lib
 from flask import Blueprint, jsonify, render_template, request, Response
 from app import db
-from models import Article, RefreshLog, ResearchSession, ResearchArticle
+from models import Article, RefreshLog, ResearchSession, ResearchArticle, FeedSource, ResearchJob
 
 bp = Blueprint("main", __name__)
 
@@ -627,6 +630,306 @@ def export_research_session(session_id):
         mimetype="text/plain",
         headers={"Content-Disposition": f"attachment; filename=research-{safe_topic}.{ext}"},
     )
+
+
+# ── Automated search pipeline ─────────────────────────────────────────────────
+
+def generate_query_variations(topic: str) -> list[str]:
+    """Use Groq to generate up to 4 focused search query strings for the topic."""
+    groq_key = os.environ.get("GROQ_API_KEY", "")
+    if not groq_key:
+        return [topic]
+
+    prompt = f"""Generate 4 short search queries (3-6 words each) for finding policy research articles about:
+"{topic}"
+
+Return ONLY the 4 queries, one per line. No numbering, no explanation, no quotes."""
+
+    try:
+        resp = req_lib.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+            json={
+                "model": "llama-3.3-70b-versatile",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 120,
+                "temperature": 0.3,
+            },
+            timeout=15,
+        )
+        lines = resp.json()["choices"][0]["message"]["content"].strip().splitlines()
+        queries = [l.strip().strip('"').strip("'") for l in lines if l.strip()][:4]
+        if topic not in queries:
+            queries.insert(0, topic)
+        return queries[:5]
+    except Exception:
+        return [topic]
+
+
+def search_google_news(query: str) -> list[dict]:
+    """Fetch up to 25 results from Google News RSS for a query."""
+    encoded = urllib.parse.quote(query)
+    url = f"https://news.google.com/rss/search?q={encoded}&hl=en-US&gl=US&ceid=US:en"
+    try:
+        parsed = fp_lib.parse(url)
+        results = []
+        for entry in parsed.entries[:25]:
+            link = getattr(entry, "link", "") or ""
+            title = getattr(entry, "title", "") or ""
+            if link:
+                results.append({"url": link, "title": title, "source": "google_news"})
+        return results
+    except Exception:
+        return []
+
+
+def search_yahoo_news(query: str) -> list[dict]:
+    """Fetch up to 25 results from Yahoo News RSS for a query."""
+    encoded = urllib.parse.quote(query)
+    url = f"https://news.search.yahoo.com/search?p={encoded}&output=rss"
+    try:
+        parsed = fp_lib.parse(url)
+        results = []
+        for entry in parsed.entries[:25]:
+            link = getattr(entry, "link", "") or ""
+            title = getattr(entry, "title", "") or ""
+            if link:
+                results.append({"url": link, "title": title, "source": "yahoo_news"})
+        return results
+    except Exception:
+        return []
+
+
+def search_gdelt(query: str) -> list[dict]:
+    """Query GDELT DOC API for matching articles (up to 50)."""
+    encoded = urllib.parse.quote(query)
+    url = (
+        f"https://api.gdeltproject.org/api/v2/doc/doc"
+        f"?query={encoded}&mode=artlist&maxrecords=50&format=json"
+    )
+    try:
+        resp = req_lib.get(url, timeout=25)
+        data = resp.json()
+        results = []
+        for article in data.get("articles", []):
+            link = article.get("url", "")
+            title = article.get("title", "")
+            if link:
+                results.append({"url": link, "title": title, "source": "gdelt"})
+        return results
+    except Exception:
+        return []
+
+
+def search_feeds_by_topic(topic: str, keywords: list[str]) -> list[dict]:
+    """Scan use_research=True feeds from feed_sources for entries matching any keyword."""
+    try:
+        feeds = FeedSource.query.filter_by(use_research=True, active=True).all()
+    except Exception:
+        return []
+
+    results = []
+    kw_lower = [k.lower() for k in keywords if len(k) > 3]
+    if not kw_lower:
+        kw_lower = [topic.lower()]
+
+    for feed in feeds:
+        try:
+            parsed = fp_lib.parse(feed.url, agent="cits-newsletter-curator/1.0")
+            for entry in parsed.entries[:30]:
+                title = getattr(entry, "title", "") or ""
+                summary = getattr(entry, "summary", "") or ""
+                combined = (title + " " + summary).lower()
+                if any(kw in combined for kw in kw_lower):
+                    link = getattr(entry, "link", "")
+                    if link:
+                        results.append({
+                            "url": link,
+                            "title": title,
+                            "source": f"feed:{feed.name}",
+                        })
+        except Exception:
+            continue
+
+    return results
+
+
+def _import_single_article(
+    session_id: int, url: str, title: str, topic: str, seen_urls: set
+) -> dict | None:
+    """Fetch description, score, and insert one research article. Returns dict or None if skipped."""
+    if url in seen_urls:
+        return None
+    seen_urls.add(url)
+
+    if ResearchArticle.query.filter_by(session_id=session_id, url=url).first():
+        return None
+
+    description = fetch_article_description(url)
+
+    if not title or title == url:
+        try:
+            resp = req_lib.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=8)
+            m = re.search(r'<title[^>]*>(.*?)</title>', resp.text, re.IGNORECASE | re.DOTALL)
+            if m:
+                title = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', '', m.group(1))).strip()
+                title = html_lib.unescape(title)[:255]
+        except Exception:
+            pass
+
+    score = score_article_for_topic(topic, title or url, description)
+
+    article = ResearchArticle(
+        session_id=session_id,
+        url=url,
+        title=title or url,
+        description=description,
+        relevance_score=score,
+        status="unreviewed",
+    )
+    db.session.add(article)
+    return article.to_dict()
+
+
+def run_research_search(app, job_id: int, session_id: int, topic: str):
+    """Background thread: 6-phase automated search and import pipeline."""
+    with app.app_context():
+
+        def update_job(phase_num, phase, urls_found=None, status="running"):
+            job = ResearchJob.query.get(job_id)
+            if job:
+                job.phase_num = phase_num
+                job.phase = phase
+                job.status = status
+                if urls_found is not None:
+                    job.urls_found = urls_found
+                db.session.commit()
+
+        def fail_job(error_msg):
+            job = ResearchJob.query.get(job_id)
+            if job:
+                job.status = "error"
+                job.error = error_msg[:500]
+                job.completed_at = datetime.now(timezone.utc)
+                db.session.commit()
+
+        try:
+            session = ResearchSession.query.get(session_id)
+            if not session:
+                fail_job("Session not found")
+                return
+
+            all_candidates = []
+
+            # Phase 1 — generate query variations
+            update_job(1, "Generating search queries…")
+            queries = generate_query_variations(topic)
+            keywords = [w for w in topic.split() if len(w) > 3] or topic.split()
+
+            # Phase 2 — Google News RSS
+            update_job(2, f"Searching Google News ({len(queries)} queries)…")
+            for q in queries:
+                all_candidates.extend(search_google_news(q))
+
+            # Phase 3 — Yahoo News RSS
+            update_job(3, "Searching Yahoo News…")
+            all_candidates.extend(search_yahoo_news(topic))
+
+            # Phase 4 — GDELT
+            update_job(4, "Querying GDELT archive…")
+            all_candidates.extend(search_gdelt(topic))
+
+            # Phase 5 — Specialist feeds
+            update_job(5, "Scanning specialist RSS feeds…")
+            all_candidates.extend(search_feeds_by_topic(topic, keywords))
+
+            # Deduplicate
+            seen: set[str] = set()
+            unique_candidates = []
+            for c in all_candidates:
+                url = c["url"]
+                if url not in seen and url.startswith("http"):
+                    seen.add(url)
+                    unique_candidates.append(c)
+
+            update_job(5, "Scanning specialist RSS feeds…", urls_found=len(unique_candidates))
+
+            # Phase 6 — Score and import
+            update_job(6, f"Scoring {len(unique_candidates)} articles…",
+                       urls_found=len(unique_candidates))
+
+            seen_urls: set[str] = set()
+            imported = 0
+            for i, candidate in enumerate(unique_candidates, 1):
+                try:
+                    result = _import_single_article(
+                        session_id,
+                        candidate["url"],
+                        candidate.get("title", ""),
+                        topic,
+                        seen_urls,
+                    )
+                    if result:
+                        imported += 1
+                    if i % 10 == 0:
+                        db.session.commit()
+                        job = ResearchJob.query.get(job_id)
+                        if job:
+                            job.phase = f"Scoring articles… ({i}/{len(unique_candidates)})"
+                            db.session.commit()
+                except Exception:
+                    continue
+
+            db.session.commit()
+
+            job = ResearchJob.query.get(job_id)
+            if job:
+                job.status = "done"
+                job.phase = f"Complete — {imported} articles imported"
+                job.urls_found = imported
+                job.completed_at = datetime.now(timezone.utc)
+                db.session.commit()
+
+        except Exception as e:
+            fail_job(str(e))
+
+
+@bp.route("/api/research/sessions/<int:session_id>/search", methods=["POST"])
+def start_research_search(session_id):
+    from app import app as flask_app
+    ResearchSession.query.get_or_404(session_id)
+
+    # Block duplicate concurrent jobs
+    running = ResearchJob.query.filter_by(session_id=session_id, status="running").first()
+    if running:
+        return jsonify({"error": "A search is already running", "job_id": running.id}), 409
+
+    job = ResearchJob(
+        session_id=session_id,
+        status="pending",
+        phase="Starting…",
+        phase_num=0,
+        total_phases=6,
+        urls_found=0,
+    )
+    db.session.add(job)
+    db.session.commit()
+
+    session = ResearchSession.query.get(session_id)
+    t = threading.Thread(
+        target=run_research_search,
+        args=(flask_app, job.id, session_id, session.topic),
+        daemon=True,
+    )
+    t.start()
+
+    return jsonify({"job_id": job.id, "status": "started"})
+
+
+@bp.route("/api/research/jobs/<int:job_id>/status", methods=["GET"])
+def get_job_status(job_id):
+    job = ResearchJob.query.get_or_404(job_id)
+    return jsonify(job.to_dict())
 
 
 # ── Debug endpoints (remove after troubleshooting) ────────────────────────────

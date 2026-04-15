@@ -110,3 +110,46 @@ class ResearchArticle(db.Model):
             "curator_note":    self.curator_note,
             "created_at":      self.created_at.isoformat() if self.created_at else None,
         }
+
+
+class FeedSource(db.Model):
+    __tablename__ = "feed_sources"
+
+    id             = db.Column(db.Integer, primary_key=True)
+    name           = db.Column(db.Text, nullable=False)
+    url            = db.Column(db.Text, nullable=False, unique=True)
+    use_newsletter = db.Column(db.Boolean, default=True)
+    use_research   = db.Column(db.Boolean, default=True)
+    tags           = db.Column(db.Text, default="")   # comma-separated
+    active         = db.Column(db.Boolean, default=True)
+    notes          = db.Column(db.Text, nullable=True)
+    added_at       = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class ResearchJob(db.Model):
+    __tablename__ = "research_jobs"
+
+    id           = db.Column(db.Integer, primary_key=True)
+    session_id   = db.Column(db.Integer, db.ForeignKey("research_sessions.id"), nullable=False)
+    status       = db.Column(db.String(20), default="pending")   # pending | running | done | error
+    phase        = db.Column(db.Text, default="")
+    phase_num    = db.Column(db.Integer, default=0)
+    total_phases = db.Column(db.Integer, default=6)
+    urls_found   = db.Column(db.Integer, default=0)
+    error        = db.Column(db.Text, nullable=True)
+    created_at   = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    completed_at = db.Column(db.DateTime, nullable=True)
+
+    def to_dict(self):
+        return {
+            "id":           self.id,
+            "session_id":   self.session_id,
+            "status":       self.status,
+            "phase":        self.phase,
+            "phase_num":    self.phase_num,
+            "total_phases": self.total_phases,
+            "urls_found":   self.urls_found,
+            "error":        self.error,
+            "created_at":   self.created_at.isoformat() if self.created_at else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+        }

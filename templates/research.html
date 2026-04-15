@@ -576,6 +576,85 @@
     }
     .btn-cancel:hover { color: var(--charcoal); border-color: #999; }
 
+    /* ── Search panel ── */
+    .search-box {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--red);
+      padding: 20px 24px;
+      margin-bottom: 16px;
+    }
+    .search-box label {
+      display: block;
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--gray);
+      margin-bottom: 12px;
+    }
+    .search-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      justify-content: space-between;
+    }
+    .search-hint {
+      font-family: 'Merriweather', serif;
+      font-size: 12px;
+      font-weight: 300;
+      color: #777;
+    }
+    .search-progress {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+    .search-phases {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    .phase-step {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      padding: 4px 9px;
+      border: 1px solid #e8e8e8;
+      color: #bbb;
+      background: #fafafa;
+      transition: all 0.2s;
+    }
+    .phase-step.active {
+      border-color: var(--red);
+      color: var(--red);
+      background: rgba(186,12,47,0.04);
+    }
+    .phase-step.done {
+      border-color: #c8dfc8;
+      color: #5a9a5a;
+      background: #f4fbf4;
+    }
+    .search-status-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .search-status-text {
+      font-family: 'Merriweather', serif;
+      font-size: 12px;
+      font-weight: 300;
+      color: #555;
+    }
+    .search-found {
+      font-family: 'Oswald', sans-serif;
+      font-size: 11px;
+      letter-spacing: 1px;
+      color: var(--red);
+    }
+
     /* ── Toast ── */
     .toast {
       position: fixed;
@@ -648,8 +727,30 @@
     <div class="stats-bar" id="detail-stats"></div>
   </div>
 
+  <div class="search-box">
+    <label>Automated Search — collect articles matching this session's topic</label>
+    <div class="search-row">
+      <span class="search-hint">Queries Google News, Yahoo News, GDELT, and specialist RSS feeds automatically.</span>
+      <button class="btn-primary" id="search-btn" onclick="startSearch()">Run Search</button>
+    </div>
+    <div class="search-progress" id="search-progress" style="display:none">
+      <div class="search-phases">
+        <div class="phase-step" id="phase-1">1 &middot; Queries</div>
+        <div class="phase-step" id="phase-2">2 &middot; Google News</div>
+        <div class="phase-step" id="phase-3">3 &middot; Yahoo News</div>
+        <div class="phase-step" id="phase-4">4 &middot; GDELT</div>
+        <div class="phase-step" id="phase-5">5 &middot; RSS Feeds</div>
+        <div class="phase-step" id="phase-6">6 &middot; Score &amp; Import</div>
+      </div>
+      <div class="search-status-row">
+        <span class="search-status-text" id="search-status-text">Starting…</span>
+        <span class="search-found" id="search-found"></span>
+      </div>
+    </div>
+  </div>
+
   <div class="import-box">
-    <label>Import URLs — paste one per line</label>
+    <label>Manual URL Import — paste one per line</label>
     <textarea id="import-textarea" class="import-textarea"
               placeholder="https://example.com/article-one&#10;https://example.com/article-two&#10;https://example.com/article-three"></textarea>
     <div class="import-row">
@@ -1056,6 +1157,72 @@
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
+  }
+
+  // ── Automated search ─────────────────────────────────────────────────────────
+
+  let searchJobId = null;
+  let searchPoller = null;
+
+  async function startSearch() {
+    const btn = document.getElementById('search-btn');
+    btn.disabled = true;
+    document.getElementById('search-progress').style.display = '';
+    document.getElementById('search-status-text').textContent = 'Starting…';
+    document.getElementById('search-found').textContent = '';
+    for (let i = 1; i <= 6; i++) {
+      const el = document.getElementById(`phase-${i}`);
+      if (el) el.className = 'phase-step';
+    }
+
+    try {
+      const res = await fetch(`/api/research/sessions/${currentSessionId}/search`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (data.error) { toast(data.error, true); btn.disabled = false; return; }
+      searchJobId = data.job_id;
+      if (searchPoller) clearInterval(searchPoller);
+      searchPoller = setInterval(pollSearch, 3000);
+    } catch (e) {
+      toast('Search failed to start', true);
+      btn.disabled = false;
+    }
+  }
+
+  async function pollSearch() {
+    if (!searchJobId) return;
+    try {
+      const res = await fetch(`/api/research/jobs/${searchJobId}/status`);
+      const job = await res.json();
+
+      document.getElementById('search-status-text').textContent = job.phase || 'Working…';
+      if (job.urls_found > 0) {
+        document.getElementById('search-found').textContent = `${job.urls_found} articles found`;
+      }
+
+      for (let i = 1; i <= 6; i++) {
+        const el = document.getElementById(`phase-${i}`);
+        if (!el) continue;
+        if (i < job.phase_num)      el.className = 'phase-step done';
+        else if (i === job.phase_num) el.className = 'phase-step active';
+        else                          el.className = 'phase-step';
+      }
+
+      if (job.status === 'done') {
+        clearInterval(searchPoller); searchPoller = null;
+        document.getElementById('search-btn').disabled = false;
+        toast(`Search complete — ${job.urls_found} articles imported`);
+        await refreshDetail();
+        setTimeout(() => { document.getElementById('search-progress').style.display = 'none'; }, 4000);
+      } else if (job.status === 'error') {
+        clearInterval(searchPoller); searchPoller = null;
+        document.getElementById('search-btn').disabled = false;
+        toast('Search error: ' + (job.error || 'unknown'), true);
+        document.getElementById('search-status-text').textContent = 'Error — ' + (job.error || 'unknown');
+      }
+    } catch (_) { /* silent, retry next tick */ }
   }
 
   // Enter key on topic input
