@@ -32,59 +32,83 @@
       padding: 0 32px;
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      height: 64px;
+      gap: 14px;
+      height: 60px;
       position: sticky;
       top: 0;
       z-index: 100;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+      border-top: 3px solid var(--red);
     }
-    .header-left { display: flex; align-items: center; gap: 20px; }
+    .header-wordmark { line-height: 1; }
     .header-title {
       font-family: 'Oswald', sans-serif;
-      font-size: 13px;
-      letter-spacing: 3px;
+      font-size: 18px;
+      font-weight: 500;
+      letter-spacing: 4px;
       text-transform: uppercase;
       color: var(--red);
+      line-height: 1;
+    }
+    .header-institution {
+      font-family: 'Oswald', sans-serif;
+      font-size: 8px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: #555;
+      margin-top: 3px;
+      white-space: nowrap;
     }
     .header-sub {
       font-family: 'Merriweather', serif;
-      font-size: 15px;
-      color: var(--white);
+      font-size: 14px;
+      color: #ccc;
       font-weight: 300;
     }
-    .header-divider { width: 1px; height: 28px; background: #444; }
+    .header-divider { width: 1px; height: 24px; background: #3a3a3a; flex-shrink: 0; }
     .nav-link {
       font-family: 'Oswald', sans-serif;
-      font-size: 12px;
+      font-size: 11px;
       letter-spacing: 1.5px;
       text-transform: uppercase;
-      color: var(--gray);
+      color: #666;
       text-decoration: none;
-      padding: 6px 14px;
-      border: 1px solid #444;
+      padding: 5px 11px;
+      border: 1px solid #383838;
       transition: all 0.15s;
     }
-    .nav-link:hover { color: var(--white); border-color: #666; }
-    .nav-link.active { color: var(--white); border-color: var(--red); }
+    .nav-link:hover { color: #ccc; border-color: #555; }
+    .nav-link.active { color: var(--white); border-color: var(--red); background: rgba(186,12,47,0.18); }
 
     /* ── Page layout ── */
     .page { max-width: 960px; margin: 0 auto; padding: 36px 24px; }
 
     .page-title {
       font-family: 'Oswald', sans-serif;
-      font-size: 11px;
+      font-size: 10px;
       letter-spacing: 3px;
       text-transform: uppercase;
       color: var(--red);
-      margin-bottom: 6px;
+      margin-bottom: 4px;
     }
     .page-heading {
       font-family: 'Merriweather', serif;
-      font-size: 22px;
+      font-size: 20px;
       font-weight: 300;
       color: var(--charcoal);
-      margin-bottom: 32px;
+      margin-bottom: 28px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .section-label {
+      font-family: 'Oswald', sans-serif;
+      font-size: 9px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #bbb;
+      margin-bottom: 12px;
+      padding-bottom: 5px;
+      border-bottom: 1px solid var(--border);
     }
 
     /* ── Week cards ── */
@@ -167,14 +191,6 @@
     }
 
     /* ── Refresh log table ── */
-    .section-label {
-      font-family: 'Oswald', sans-serif;
-      font-size: 11px;
-      letter-spacing: 2px;
-      text-transform: uppercase;
-      color: var(--gray);
-      margin-bottom: 12px;
-    }
     .log-table {
       width: 100%;
       border-collapse: collapse;
@@ -224,15 +240,16 @@
 <body>
 
   <header>
-    <div class="header-left">
-      <div>
-        <div class="header-title">CITS</div>
-        <div class="header-sub">Newsletter Curator</div>
-      </div>
-      <div class="header-divider"></div>
-      <a href="/" class="nav-link">← Curator</a>
-      <a href="/history" class="nav-link active">History</a>
+    <div class="header-wordmark">
+      <div class="header-title">CITS</div>
+      <div class="header-institution">Center for International Trade and Security</div>
     </div>
+    <div class="header-divider"></div>
+    <div class="header-sub">Newsletter Curator</div>
+    <div class="header-divider"></div>
+    <a href="/" class="nav-link">Curator</a>
+    <a href="/history" class="nav-link active">History</a>
+    <a href="/research" class="nav-link">Research</a>
   </header>
 
   <div class="page">

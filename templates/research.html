@@ -36,39 +36,52 @@
       display: flex;
       align-items: center;
       gap: 14px;
-      height: 64px;
+      height: 60px;
       position: sticky;
       top: 0;
       z-index: 100;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+      border-top: 3px solid var(--red);
     }
+    .header-wordmark { line-height: 1; }
     .header-title {
       font-family: 'Oswald', sans-serif;
-      font-size: 13px;
-      letter-spacing: 3px;
+      font-size: 18px;
+      font-weight: 500;
+      letter-spacing: 4px;
       text-transform: uppercase;
       color: var(--red);
+      line-height: 1;
+    }
+    .header-institution {
+      font-family: 'Oswald', sans-serif;
+      font-size: 8px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: #555;
+      margin-top: 3px;
+      white-space: nowrap;
     }
     .header-sub {
       font-family: 'Merriweather', serif;
-      font-size: 15px;
-      color: var(--white);
+      font-size: 14px;
+      color: #ccc;
       font-weight: 300;
     }
-    .header-divider { width: 1px; height: 28px; background: #444; flex-shrink: 0; }
+    .header-divider { width: 1px; height: 24px; background: #3a3a3a; flex-shrink: 0; }
     .nav-link {
       font-family: 'Oswald', sans-serif;
-      font-size: 12px;
+      font-size: 11px;
       letter-spacing: 1.5px;
       text-transform: uppercase;
-      color: var(--gray);
+      color: #666;
       text-decoration: none;
-      padding: 6px 12px;
-      border: 1px solid #444;
+      padding: 5px 11px;
+      border: 1px solid #383838;
       transition: all 0.15s;
     }
-    .nav-link:hover { color: var(--white); border-color: #666; }
-    .nav-link.active { color: var(--white); border-color: var(--red); background: rgba(186,12,47,0.15); }
+    .nav-link:hover { color: #ccc; border-color: #555; }
+    .nav-link.active { color: var(--white); border-color: var(--red); background: rgba(186,12,47,0.18); }
 
     /* ── Page layout ── */
     .page { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
@@ -100,11 +113,13 @@
     .new-session-box label {
       display: block;
       font-family: 'Oswald', sans-serif;
-      font-size: 11px;
+      font-size: 9px;
       letter-spacing: 2px;
       text-transform: uppercase;
-      color: var(--gray);
+      color: #bbb;
       margin-bottom: 8px;
+      padding-bottom: 5px;
+      border-bottom: 1px solid var(--border);
     }
     .new-session-row { display: flex; gap: 10px; }
     .new-session-input {
@@ -276,11 +291,13 @@
     .import-box label {
       display: block;
       font-family: 'Oswald', sans-serif;
-      font-size: 11px;
+      font-size: 9px;
       letter-spacing: 2px;
       text-transform: uppercase;
-      color: var(--gray);
+      color: #bbb;
       margin-bottom: 8px;
+      padding-bottom: 5px;
+      border-bottom: 1px solid var(--border);
     }
     .import-textarea {
       width: 100%;
@@ -583,11 +600,14 @@
 <body>
 
 <header>
-  <div class="header-title">CITS</div>
+  <div class="header-wordmark">
+    <div class="header-title">CITS</div>
+    <div class="header-institution">Center for International Trade and Security</div>
+  </div>
   <div class="header-divider"></div>
   <div class="header-sub">Research Mode</div>
   <div class="header-divider"></div>
-  <a href="/" class="nav-link">Newsletter Curator</a>
+  <a href="/" class="nav-link">Curator</a>
   <a href="/history" class="nav-link">History</a>
   <a href="/research" class="nav-link active">Research</a>
 </header>
