@@ -624,6 +624,34 @@ def export_research_session(session_id):
             lines.append(f"**Note:** {a.curator_note}")
         lines.append("")
 
+    if fmt == "text":
+        # Clean plain text — no markdown syntax, easy to paste into Word/Docs
+        text_lines = [
+            f"RESEARCH PACK: {session.topic.upper()}",
+            f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d')}",
+            f"Articles: {len(articles)}",
+            "",
+            "=" * 72,
+            "",
+        ]
+        for a in articles:
+            text_lines.append(a.title or a.url)
+            text_lines.append(a.url)
+            if a.relevance_score:
+                text_lines.append(f"Relevance: {a.relevance_score}/10")
+            if a.description:
+                text_lines.append(f"Summary: {a.description}")
+            if a.curator_note:
+                text_lines.append(f"Note: {a.curator_note}")
+            text_lines.append("")
+            text_lines.append("-" * 48)
+            text_lines.append("")
+        return Response(
+            "\n".join(text_lines),
+            mimetype="text/plain",
+            headers={"Content-Disposition": f"attachment; filename=research-{safe_topic}.txt"},
+        )
+
     ext = "md" if fmt == "markdown" else "txt"
     return Response(
         "\n".join(lines),

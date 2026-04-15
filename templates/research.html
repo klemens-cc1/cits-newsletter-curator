@@ -655,6 +655,56 @@
       color: var(--red);
     }
 
+    /* ── Triage keyboard hint ── */
+    .kbd-hint {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 1px;
+      color: #aaa;
+      padding: 6px 0 10px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+    .kbd {
+      display: inline-block;
+      background: #f0f0f0;
+      border: 1px solid #ddd;
+      border-bottom-width: 2px;
+      padding: 1px 6px;
+      font-size: 10px;
+      color: #666;
+      line-height: 1.6;
+    }
+
+    /* ── Focused article (keyboard nav) ── */
+    .article-row.focused {
+      border-left-color: var(--red);
+      box-shadow: 0 0 0 2px rgba(186,12,47,0.12);
+    }
+
+    /* ── Low-score collapsible ── */
+    .low-score-section {
+      margin-top: 20px;
+      border: 1px solid var(--border);
+    }
+    .low-score-summary {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 1.8px;
+      text-transform: uppercase;
+      color: var(--gray);
+      padding: 11px 16px;
+      cursor: pointer;
+      background: #fafafa;
+      list-style: none;
+      user-select: none;
+    }
+    .low-score-summary::-webkit-details-marker { display: none; }
+    .low-score-summary::before { content: '\25B8\00A0'; }
+    details[open] > .low-score-summary::before { content: '\25BE\00A0'; }
+    .low-score-summary:hover { background: #f0f0f0; color: var(--charcoal); }
+
     /* ── Toast ── */
     .toast {
       position: fixed;
@@ -774,6 +824,14 @@
     </div>
   </div>
 
+  <div class="kbd-hint">
+    <span class="kbd">j</span> / <span class="kbd">k</span> navigate &nbsp;
+    <span class="kbd">s</span> select &nbsp;
+    <span class="kbd">m</span> maybe &nbsp;
+    <span class="kbd">x</span> skip &nbsp;
+    <span class="kbd">o</span> open link
+  </div>
+
   <div class="article-list" id="article-list"></div>
 </div>
 
@@ -792,6 +850,7 @@
     <div class="modal-field">
       <label class="modal-label">Format</label>
       <select class="modal-select" id="export-format">
+        <option value="text">Plain text (.txt) — paste into Word / Docs</option>
         <option value="markdown">Markdown (.md) — research pack</option>
         <option value="csv">CSV — with relevance scores</option>
       </select>
@@ -952,8 +1011,12 @@
     renderArticles();
   }
 
+  let focusedIndex = -1;
+
   function renderArticles() {
     const list = document.getElementById('article-list');
+    focusedIndex = -1;
+
     const visible = currentFilter === 'all'
       ? allArticles
       : allArticles.filter(a => a.status === currentFilter);
@@ -969,7 +1032,31 @@
       return;
     }
 
-    visible.forEach(a => list.appendChild(buildArticleRow(a)));
+    // Split: high relevance (≥5 or unscored) vs low (<5)
+    const high = visible.filter(a => !a.relevance_score || a.relevance_score >= 5);
+    const low  = visible.filter(a => a.relevance_score && a.relevance_score < 5);
+
+    high.forEach(a => list.appendChild(buildArticleRow(a)));
+
+    if (low.length > 0) {
+      const details = document.createElement('details');
+      details.className = 'low-score-section';
+      const summary = document.createElement('summary');
+      summary.className = 'low-score-summary';
+      summary.textContent = `Low relevance (score 1–4) — ${low.length} article${low.length !== 1 ? 's' : ''}`;
+      details.appendChild(summary);
+      low.forEach(a => details.appendChild(buildArticleRow(a)));
+      list.appendChild(details);
+    }
+  }
+
+  function focusArticle(index) {
+    const rows = [...document.querySelectorAll('#article-list .article-row')];
+    if (index < 0 || index >= rows.length) return;
+    rows.forEach(r => r.classList.remove('focused'));
+    rows[index].classList.add('focused');
+    rows[index].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    focusedIndex = index;
   }
 
   function buildArticleRow(a) {
@@ -1215,6 +1302,10 @@
         document.getElementById('search-btn').disabled = false;
         toast(`Search complete — ${job.urls_found} articles imported`);
         await refreshDetail();
+        // Auto-switch to unreviewed so the user goes straight into triage
+        const unrevBtn = document.querySelector('.filter-btn[data-filter="unreviewed"]');
+        if (unrevBtn) setFilter('unreviewed', unrevBtn);
+        focusArticle(0);
         setTimeout(() => { document.getElementById('search-progress').style.display = 'none'; }, 4000);
       } else if (job.status === 'error') {
         clearInterval(searchPoller); searchPoller = null;
@@ -1224,6 +1315,53 @@
       }
     } catch (_) { /* silent, retry next tick */ }
   }
+
+  // ── Keyboard triage shortcuts ─────────────────────────────────────────────────
+
+  document.addEventListener('keydown', e => {
+    // Only active in detail view, not when typing in an input
+    if (document.getElementById('session-detail-view').style.display === 'none') return;
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+
+    const rows = [...document.querySelectorAll('#article-list .article-row')];
+    if (!rows.length) return;
+
+    const getArticleId = () => focusedIndex >= 0 ? parseInt(rows[focusedIndex].dataset.id) : null;
+    const getBtn = (nth) => focusedIndex >= 0 ? rows[focusedIndex].querySelectorAll('.status-btn')[nth] : null;
+
+    switch (e.key) {
+      case 'j': case 'ArrowDown':
+        e.preventDefault();
+        focusArticle(focusedIndex < 0 ? 0 : Math.min(focusedIndex + 1, rows.length - 1));
+        break;
+      case 'k': case 'ArrowUp':
+        e.preventDefault();
+        focusArticle(Math.max(focusedIndex - 1, 0));
+        break;
+      case 's': {
+        const id = getArticleId(); const btn = getBtn(0);
+        if (id !== null) { setStatus(id, 'selected', btn); focusArticle(Math.min(focusedIndex + 1, rows.length - 1)); }
+        break;
+      }
+      case 'm': {
+        const id = getArticleId(); const btn = getBtn(1);
+        if (id !== null) { setStatus(id, 'maybe', btn); focusArticle(Math.min(focusedIndex + 1, rows.length - 1)); }
+        break;
+      }
+      case 'x': {
+        const id = getArticleId(); const btn = getBtn(2);
+        if (id !== null) { setStatus(id, 'skip', btn); focusArticle(Math.min(focusedIndex + 1, rows.length - 1)); }
+        break;
+      }
+      case 'o': {
+        if (focusedIndex >= 0) {
+          const link = rows[focusedIndex].querySelector('.article-title a');
+          if (link) window.open(link.href, '_blank');
+        }
+        break;
+      }
+    }
+  });
 
   // Enter key on topic input
   document.getElementById('new-topic-input').addEventListener('keydown', e => {
