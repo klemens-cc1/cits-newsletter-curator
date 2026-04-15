@@ -5,7 +5,8 @@ import re
 import html as html_lib
 import threading
 import urllib.parse
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import datetime, timezone, timedelta
 
 import feedparser as fp_lib
 import requests as req_lib
@@ -14,6 +15,14 @@ from app import db
 from models import Article, RefreshLog, ResearchSession, ResearchArticle, FeedSource, ResearchJob
 
 bp = Blueprint("main", __name__)
+
+
+@dataclass
+class SearchOptions:
+    topic: str
+    date_days: int | None = None   # None = all time; else last N days
+    min_score: int = 1             # discard articles scoring below this
+    max_results: int = 200         # cap total articles imported
 
 
 def current_week_key():
@@ -694,8 +703,11 @@ Return ONLY the 4 queries, one per line. No numbering, no explanation, no quotes
         return [topic]
 
 
-def search_google_news(query: str) -> list[dict]:
+def search_google_news(query: str, date_days: int | None = None) -> list[dict]:
     """Fetch up to 25 results from Google News RSS for a query."""
+    if date_days:
+        from_date = (datetime.now(timezone.utc) - timedelta(days=date_days)).strftime('%Y-%m-%d')
+        query = f"{query} after:{from_date}"
     encoded = urllib.parse.quote(query)
     url = f"https://news.google.com/rss/search?q={encoded}&hl=en-US&gl=US&ceid=US:en"
     try:
@@ -728,13 +740,16 @@ def search_yahoo_news(query: str) -> list[dict]:
         return []
 
 
-def search_gdelt(query: str) -> list[dict]:
+def search_gdelt(query: str, date_days: int | None = None) -> list[dict]:
     """Query GDELT DOC API for matching articles (up to 50)."""
     encoded = urllib.parse.quote(query)
     url = (
         f"https://api.gdeltproject.org/api/v2/doc/doc"
         f"?query={encoded}&mode=artlist&maxrecords=50&format=json"
     )
+    if date_days:
+        start = (datetime.now(timezone.utc) - timedelta(days=date_days)).strftime('%Y%m%d%H%M%S')
+        url += f"&startdatetime={start}"
     try:
         resp = req_lib.get(url, timeout=25)
         data = resp.json()
@@ -749,7 +764,9 @@ def search_gdelt(query: str) -> list[dict]:
         return []
 
 
-def search_feeds_by_topic(topic: str, keywords: list[str]) -> list[dict]:
+def search_feeds_by_topic(
+    topic: str, keywords: list[str], date_days: int | None = None
+) -> list[dict]:
     """Scan use_research=True feeds from feed_sources for entries matching any keyword."""
     try:
         feeds = FeedSource.query.filter_by(use_research=True, active=True).all()
@@ -760,11 +777,18 @@ def search_feeds_by_topic(topic: str, keywords: list[str]) -> list[dict]:
     kw_lower = [k.lower() for k in keywords if len(k) > 3]
     if not kw_lower:
         kw_lower = [topic.lower()]
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=date_days)) if date_days else None
 
     for feed in feeds:
         try:
             parsed = fp_lib.parse(feed.url, agent="cits-newsletter-curator/1.0")
             for entry in parsed.entries[:30]:
+                if cutoff:
+                    pub = getattr(entry, "published_parsed", None)
+                    if pub:
+                        entry_dt = datetime(*pub[:6], tzinfo=timezone.utc)
+                        if entry_dt < cutoff:
+                            continue
                 title = getattr(entry, "title", "") or ""
                 summary = getattr(entry, "summary", "") or ""
                 combined = (title + " " + summary).lower()
@@ -783,7 +807,7 @@ def search_feeds_by_topic(topic: str, keywords: list[str]) -> list[dict]:
 
 
 def _import_single_article(
-    session_id: int, url: str, title: str, topic: str, seen_urls: set
+    session_id: int, url: str, title: str, topic: str, seen_urls: set, min_score: int = 1
 ) -> dict | None:
     """Fetch description, score, and insert one research article. Returns dict or None if skipped."""
     if url in seen_urls:
@@ -807,6 +831,9 @@ def _import_single_article(
 
     score = score_article_for_topic(topic, title or url, description)
 
+    if score < min_score:
+        return None
+
     article = ResearchArticle(
         session_id=session_id,
         url=url,
@@ -819,8 +846,11 @@ def _import_single_article(
     return article.to_dict()
 
 
-def run_research_search(app, job_id: int, session_id: int, topic: str):
+def run_research_search(app, job_id: int, session_id: int, topic: str, opts: SearchOptions | None = None):
     """Background thread: 6-phase automated search and import pipeline."""
+    if opts is None:
+        opts = SearchOptions(topic=topic)
+
     with app.app_context():
 
         def update_job(phase_num, phase, urls_found=None, status="running"):
@@ -857,7 +887,7 @@ def run_research_search(app, job_id: int, session_id: int, topic: str):
             # Phase 2 — Google News RSS
             update_job(2, f"Searching Google News ({len(queries)} queries)…")
             for q in queries:
-                all_candidates.extend(search_google_news(q))
+                all_candidates.extend(search_google_news(q, opts.date_days))
 
             # Phase 3 — Yahoo News RSS
             update_job(3, "Searching Yahoo News…")
@@ -865,11 +895,11 @@ def run_research_search(app, job_id: int, session_id: int, topic: str):
 
             # Phase 4 — GDELT
             update_job(4, "Querying GDELT archive…")
-            all_candidates.extend(search_gdelt(topic))
+            all_candidates.extend(search_gdelt(topic, opts.date_days))
 
             # Phase 5 — Specialist feeds
             update_job(5, "Scanning specialist RSS feeds…")
-            all_candidates.extend(search_feeds_by_topic(topic, keywords))
+            all_candidates.extend(search_feeds_by_topic(topic, keywords, opts.date_days))
 
             # Deduplicate
             seen: set[str] = set()
@@ -882,13 +912,15 @@ def run_research_search(app, job_id: int, session_id: int, topic: str):
 
             update_job(5, "Scanning specialist RSS feeds…", urls_found=len(unique_candidates))
 
-            # Phase 6 — Score and import
+            # Phase 6 — Score and import (filtered by min_score, capped at max_results)
             update_job(6, f"Scoring {len(unique_candidates)} articles…",
                        urls_found=len(unique_candidates))
 
             seen_urls: set[str] = set()
             imported = 0
             for i, candidate in enumerate(unique_candidates, 1):
+                if imported >= opts.max_results:
+                    break
                 try:
                     result = _import_single_article(
                         session_id,
@@ -896,6 +928,7 @@ def run_research_search(app, job_id: int, session_id: int, topic: str):
                         candidate.get("title", ""),
                         topic,
                         seen_urls,
+                        opts.min_score,
                     )
                     if result:
                         imported += 1
@@ -945,9 +978,17 @@ def start_research_search(session_id):
     db.session.commit()
 
     session = ResearchSession.query.get(session_id)
+    data = request.get_json() or {}
+    date_map = {'7d': 7, '30d': 30, '90d': 90, '180d': 180}
+    opts = SearchOptions(
+        topic=session.topic,
+        date_days=date_map.get(data.get('date_range', ''), None),
+        min_score=max(1, min(9, int(data.get('min_score', 1)))),
+        max_results=max(10, min(500, int(data.get('max_results', 200)))),
+    )
     t = threading.Thread(
         target=run_research_search,
-        args=(flask_app, job.id, session_id, session.topic),
+        args=(flask_app, job.id, session_id, session.topic, opts),
         daemon=True,
     )
     t.start()

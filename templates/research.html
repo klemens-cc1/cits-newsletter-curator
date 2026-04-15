@@ -357,6 +357,48 @@
     .filter-btn:hover { color: var(--charcoal); border-color: #888; }
     .stats-right { margin-left: auto; display: flex; gap: 6px; }
 
+    /* ── Advanced search options ── */
+    .adv-toggle {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--gray);
+      background: none;
+      border: 1px solid #e0e0e0;
+      padding: 6px 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .adv-toggle:hover { color: var(--charcoal); border-color: #999; }
+    .adv-options {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+    .adv-row { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-end; }
+    .adv-field { display: flex; flex-direction: column; gap: 5px; }
+    .adv-label {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--gray);
+    }
+    .adv-label span { color: var(--charcoal); font-size: 12px; }
+    .adv-select, .adv-number {
+      font-family: 'Oswald', sans-serif;
+      font-size: 12px;
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      background: var(--white);
+      color: var(--charcoal);
+      outline: none;
+    }
+    .adv-select:focus, .adv-number:focus { border-color: var(--red); }
+    .adv-number { width: 80px; }
+    .adv-range { accent-color: var(--red); width: 120px; cursor: pointer; }
+
     /* ── Article rows ── */
     .article-list { display: flex; flex-direction: column; gap: 0; }
 
@@ -364,8 +406,9 @@
       background: var(--white);
       border: 1px solid var(--border);
       border-top: none;
-      padding: 14px 16px;
+      padding: 9px 14px;
       transition: background 0.1s;
+      cursor: pointer;
     }
     .article-row:first-child { border-top: 1px solid var(--border); }
     .article-row.status-selected { background: var(--selected); border-left: 3px solid var(--red); }
@@ -374,8 +417,34 @@
 
     .article-top {
       display: flex;
-      align-items: flex-start;
+      align-items: center;
       gap: 12px;
+    }
+    .article-title-line {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .article-title-line a {
+      font-family: 'Merriweather', serif;
+      font-size: 13px;
+      font-weight: 400;
+      color: var(--charcoal);
+      text-decoration: none;
+      line-height: 1.4;
+    }
+    .article-title-line a:hover { color: var(--red); }
+    .article-source-tag {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 0.5px;
+      color: var(--gray);
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .article-detail {
+      padding: 10px 0 6px 40px;
     }
     .score-badge {
       flex-shrink: 0;
@@ -781,7 +850,33 @@
     <label>Automated Search — collect articles matching this session's topic</label>
     <div class="search-row">
       <span class="search-hint">Queries Google News, Yahoo News, GDELT, and specialist RSS feeds automatically.</span>
-      <button class="btn-primary" id="search-btn" onclick="startSearch()">Run Search</button>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="adv-toggle" id="adv-toggle" onclick="toggleAdvanced()">Options &#9658;</button>
+        <button class="btn-primary" id="search-btn" onclick="startSearch()">Run Search</button>
+      </div>
+    </div>
+    <div class="adv-options" id="adv-options" style="display:none">
+      <div class="adv-row">
+        <div class="adv-field">
+          <label class="adv-label">Date range</label>
+          <select class="adv-select" id="adv-date-range">
+            <option value="">All time</option>
+            <option value="7d">Last 7 days</option>
+            <option value="30d">Last 30 days</option>
+            <option value="90d">Last 90 days</option>
+            <option value="180d">Last 6 months</option>
+          </select>
+        </div>
+        <div class="adv-field">
+          <label class="adv-label">Min score &nbsp;<span id="adv-score-val">1</span></label>
+          <input type="range" class="adv-range" id="adv-min-score" min="1" max="9" value="1"
+                 oninput="document.getElementById('adv-score-val').textContent=this.value">
+        </div>
+        <div class="adv-field">
+          <label class="adv-label">Max articles</label>
+          <input type="number" class="adv-number" id="adv-max-results" value="200" min="10" max="500">
+        </div>
+      </div>
     </div>
     <div class="search-progress" id="search-progress" style="display:none">
       <div class="search-phases">
@@ -825,11 +920,14 @@
   </div>
 
   <div class="kbd-hint">
-    <span class="kbd">j</span> / <span class="kbd">k</span> navigate &nbsp;
+    <span class="kbd">j</span><span class="kbd">k</span> navigate &nbsp;
     <span class="kbd">s</span> select &nbsp;
     <span class="kbd">m</span> maybe &nbsp;
     <span class="kbd">x</span> skip &nbsp;
-    <span class="kbd">o</span> open link
+    <span class="kbd">u</span> undo &nbsp;
+    <span class="kbd">Enter</span> open &nbsp;
+    <span class="kbd">e</span> expand &nbsp;
+    <span class="kbd">n</span> note
   </div>
 
   <div class="article-list" id="article-list"></div>
@@ -857,6 +955,7 @@
     </div>
     <div class="modal-btns">
       <button class="btn-cancel" onclick="closeExportModal()">Cancel</button>
+      <button class="btn-outline" onclick="copyToClipboard()">Copy</button>
       <button class="btn-primary" onclick="doExport()">Download</button>
     </div>
   </div>
@@ -1073,35 +1172,55 @@
     const skipActive  = a.status === 'skip'     ? 'active-skip'     : '';
 
     row.innerHTML = `
-      <div class="article-top">
+      <div class="article-top" onclick="toggleExpand(event, this.closest('.article-row'))">
         <div class="score-badge ${scClass}" title="Relevance score">${scLabel}</div>
         <div class="article-main">
-          <div class="article-title">
-            <a href="${escHtml(a.url)}" target="_blank" rel="noopener">${escHtml(a.title || a.url)}</a>
-          </div>
-          <div class="article-url">${escHtml(domainOf(a.url))}</div>
-          ${a.description ? `<div class="article-description">${escHtml(a.description)}</div>` : ''}
-          <div class="note-row">
-            <span class="note-label">Note</span>
-            <textarea class="note-input" rows="1"
-              placeholder="Why this matters for your research…"
-              data-id="${a.id}"
-              onblur="saveNote(${a.id}, this)"
-              oninput="autoResize(this)">${escHtml(a.curator_note || '')}</textarea>
-            <span class="note-saved" id="note-saved-${a.id}">Saved</span>
+          <div class="article-title-line">
+            <a href="${escHtml(a.url)}" target="_blank" rel="noopener"
+               onclick="event.stopPropagation()">${escHtml(a.title || a.url)}</a>
+            <span class="article-source-tag">${escHtml(domainOf(a.url))}</span>
           </div>
         </div>
         <div class="article-controls">
           <div class="status-btns">
-            <button class="status-btn ${selActive}"   onclick="setStatus(${a.id}, 'selected', this)">Select</button>
-            <button class="status-btn ${maybeActive}" onclick="setStatus(${a.id}, 'maybe', this)">Maybe</button>
-            <button class="status-btn ${skipActive}"  onclick="setStatus(${a.id}, 'skip', this)">Skip</button>
+            <button class="status-btn ${selActive}"
+              onclick="event.stopPropagation(); setStatus(${a.id}, 'selected', this)">Select</button>
+            <button class="status-btn ${maybeActive}"
+              onclick="event.stopPropagation(); setStatus(${a.id}, 'maybe', this)">Maybe</button>
+            <button class="status-btn ${skipActive}"
+              onclick="event.stopPropagation(); setStatus(${a.id}, 'skip', this)">Skip</button>
           </div>
-          <button class="del-btn" title="Remove article" onclick="deleteArticle(${a.id})">✕</button>
+          <button class="del-btn" title="Remove article"
+            onclick="event.stopPropagation(); deleteArticle(${a.id})">✕</button>
+        </div>
+      </div>
+      <div class="article-detail" style="display:none">
+        ${a.description
+          ? `<div class="article-description">${escHtml(a.description)}</div>`
+          : ''}
+        <div class="note-row">
+          <span class="note-label">Note</span>
+          <textarea class="note-input" rows="1"
+            data-id="${a.id}"
+            onblur="saveNote(${a.id}, this)"
+            oninput="autoResize(this)">${escHtml(a.curator_note || '')}</textarea>
+          <span class="note-saved" id="note-saved-${a.id}">Saved</span>
         </div>
       </div>
     `;
     return row;
+  }
+
+  function toggleExpand(e, row) {
+    if (['A', 'BUTTON', 'TEXTAREA'].includes(e.target.tagName)) return;
+    const detail = row.querySelector('.article-detail');
+    if (!detail) return;
+    const isOpen = detail.style.display !== 'none';
+    detail.style.display = isOpen ? 'none' : '';
+    if (!isOpen) {
+      const ta = detail.querySelector('.note-input');
+      if (ta) autoResize(ta);
+    }
   }
 
   // ── Import ────────────────────────────────────────────────────────────────────
@@ -1235,6 +1354,56 @@
     closeExportModal();
   }
 
+  async function copyToClipboard() {
+    const statusFilter = document.getElementById('export-status').value;
+    const statuses = statusFilter.split(',').map(s => s.trim());
+    const fmt = document.getElementById('export-format').value;
+
+    const articles = allArticles
+      .filter(a => statuses.includes(a.status))
+      .sort((a, b) => (b.relevance_score || 0) - (a.relevance_score || 0));
+
+    if (!articles.length) { toast('No articles match the selected filter', true); return; }
+
+    const topic = document.getElementById('detail-topic').textContent;
+    const date  = new Date().toISOString().split('T')[0];
+    let text = '';
+
+    if (fmt === 'csv') {
+      const rows = [['title','url','relevance_score','status','description','curator_note']];
+      articles.forEach(a => rows.push([
+        a.title||'', a.url, a.relevance_score||'', a.status, a.description||'', a.curator_note||''
+      ]));
+      text = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+    } else if (fmt === 'markdown') {
+      text = `# Research Pack: ${topic}\nGenerated: ${date}\nArticles: ${articles.length}\n\n---\n\n`;
+      articles.forEach(a => {
+        text += `## ${a.title || a.url}\n**Source:** ${a.url}\n`;
+        if (a.relevance_score) text += `**Relevance score:** ${a.relevance_score}/10\n`;
+        if (a.description) text += `**Description:** ${a.description}\n`;
+        if (a.curator_note) text += `**Note:** ${a.curator_note}\n`;
+        text += '\n';
+      });
+    } else {
+      text = `RESEARCH PACK: ${topic.toUpperCase()}\nGenerated: ${date}\nArticles: ${articles.length}\n\n${'='.repeat(72)}\n\n`;
+      articles.forEach(a => {
+        text += `${a.title || a.url}\n${a.url}\n`;
+        if (a.relevance_score) text += `Relevance: ${a.relevance_score}/10\n`;
+        if (a.description) text += `Summary: ${a.description}\n`;
+        if (a.curator_note) text += `Note: ${a.curator_note}\n`;
+        text += '\n' + '-'.repeat(48) + '\n\n';
+      });
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
+      toast(`Copied ${articles.length} articles to clipboard`);
+      closeExportModal();
+    } catch (_) {
+      toast('Clipboard unavailable — use Download instead', true);
+    }
+  }
+
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
   function escHtml(s) {
@@ -1251,6 +1420,14 @@
   let searchJobId = null;
   let searchPoller = null;
 
+  function toggleAdvanced() {
+    const opts = document.getElementById('adv-options');
+    const btn  = document.getElementById('adv-toggle');
+    const isOpen = opts.style.display !== 'none';
+    opts.style.display = isOpen ? 'none' : '';
+    btn.innerHTML = isOpen ? 'Options &#9658;' : 'Options &#9660;';
+  }
+
   async function startSearch() {
     const btn = document.getElementById('search-btn');
     btn.disabled = true;
@@ -1262,10 +1439,15 @@
       if (el) el.className = 'phase-step';
     }
 
+    const dateRange  = document.getElementById('adv-date-range')?.value  || '';
+    const minScore   = parseInt(document.getElementById('adv-min-score')?.value  || '1');
+    const maxResults = parseInt(document.getElementById('adv-max-results')?.value || '200');
+
     try {
       const res = await fetch(`/api/research/sessions/${currentSessionId}/search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date_range: dateRange, min_score: minScore, max_results: maxResults }),
       });
       const data = await res.json();
       if (data.error) { toast(data.error, true); btn.disabled = false; return; }
@@ -1353,10 +1535,41 @@
         if (id !== null) { setStatus(id, 'skip', btn); focusArticle(Math.min(focusedIndex + 1, rows.length - 1)); }
         break;
       }
-      case 'o': {
+      case 'u': {
+        // Undo — mark as unreviewed
+        const id = getArticleId();
+        if (id !== null) {
+          const row = rows[focusedIndex];
+          const anyActive = row.querySelector('.status-btn.active-selected, .status-btn.active-maybe, .status-btn.active-skip');
+          if (anyActive) setStatus(id, anyActive.textContent.toLowerCase().replace('select','selected'), anyActive);
+        }
+        break;
+      }
+      case 'Enter': case 'o': {
+        e.preventDefault();
         if (focusedIndex >= 0) {
-          const link = rows[focusedIndex].querySelector('.article-title a');
+          const link = rows[focusedIndex].querySelector('.article-title-line a');
           if (link) window.open(link.href, '_blank');
+        }
+        break;
+      }
+      case 'e': case ' ': {
+        e.preventDefault();
+        if (focusedIndex >= 0) toggleExpand({ target: document.body }, rows[focusedIndex]);
+        break;
+      }
+      case 'n': {
+        // Focus note field, expanding the row first
+        if (focusedIndex >= 0) {
+          const detail = rows[focusedIndex].querySelector('.article-detail');
+          if (detail && detail.style.display === 'none') {
+            detail.style.display = '';
+            const ta = detail.querySelector('.note-input');
+            if (ta) { autoResize(ta); setTimeout(() => ta.focus(), 50); }
+          } else if (detail) {
+            const ta = detail.querySelector('.note-input');
+            if (ta) ta.focus();
+          }
         }
         break;
       }
