@@ -703,6 +703,46 @@ Return ONLY the 4 queries, one per line. No numbering, no explanation, no quotes
         return [topic]
 
 
+def resolve_url(url: str) -> str:
+    """Follow redirects on aggregator wrapper URLs to get the real destination."""
+    if 'news.google.com' not in url:
+        return url
+    try:
+        resp = req_lib.head(
+            url, allow_redirects=True, timeout=8,
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+        )
+        return resp.url or url
+    except Exception:
+        return url
+
+
+def _parse_pub_date(raw_html: str) -> datetime | None:
+    """Extract article:published_time or datePublished from page HTML."""
+    for pat in [
+        r'<meta[^>]+property=["\']article:published_time["\'][^>]+content=["\']([^"\']+)["\']',
+        r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']article:published_time["\']',
+        r'"datePublished"\s*:\s*"([^"]{10,30})"',
+    ]:
+        m = re.search(pat, raw_html, re.IGNORECASE)
+        if m:
+            try:
+                return datetime.fromisoformat(m.group(1)[:19]).replace(tzinfo=timezone.utc)
+            except Exception:
+                continue
+    return None
+
+
+def _pub_str(parsed_time) -> str:
+    """Convert feedparser time_struct to ISO string."""
+    if not parsed_time:
+        return ""
+    try:
+        return datetime(*parsed_time[:6], tzinfo=timezone.utc).isoformat()
+    except Exception:
+        return ""
+
+
 def search_google_news(query: str, date_days: int | None = None) -> list[dict]:
     """Fetch up to 25 results from Google News RSS for a query."""
     if date_days:
@@ -717,7 +757,10 @@ def search_google_news(query: str, date_days: int | None = None) -> list[dict]:
             link = getattr(entry, "link", "") or ""
             title = getattr(entry, "title", "") or ""
             if link:
-                results.append({"url": link, "title": title, "source": "google_news"})
+                results.append({
+                    "url": link, "title": title, "source": "google_news",
+                    "published_at": _pub_str(getattr(entry, "published_parsed", None)),
+                })
         return results
     except Exception:
         return []
@@ -734,7 +777,10 @@ def search_yahoo_news(query: str) -> list[dict]:
             link = getattr(entry, "link", "") or ""
             title = getattr(entry, "title", "") or ""
             if link:
-                results.append({"url": link, "title": title, "source": "yahoo_news"})
+                results.append({
+                    "url": link, "title": title, "source": "yahoo_news",
+                    "published_at": _pub_str(getattr(entry, "published_parsed", None)),
+                })
         return results
     except Exception:
         return []
@@ -757,8 +803,17 @@ def search_gdelt(query: str, date_days: int | None = None) -> list[dict]:
         for article in data.get("articles", []):
             link = article.get("url", "")
             title = article.get("title", "")
+            pub_str = ""
+            seendate = article.get("seendate", "")
+            if seendate:
+                try:
+                    pub_str = datetime.strptime(seendate, '%Y%m%dT%H%M%SZ').replace(
+                        tzinfo=timezone.utc).isoformat()
+                except Exception:
+                    pass
             if link:
-                results.append({"url": link, "title": title, "source": "gdelt"})
+                results.append({"url": link, "title": title, "source": "gdelt",
+                                 "published_at": pub_str})
         return results
     except Exception:
         return []
@@ -783,12 +838,10 @@ def search_feeds_by_topic(
         try:
             parsed = fp_lib.parse(feed.url, agent="cits-newsletter-curator/1.0")
             for entry in parsed.entries[:30]:
-                if cutoff:
-                    pub = getattr(entry, "published_parsed", None)
-                    if pub:
-                        entry_dt = datetime(*pub[:6], tzinfo=timezone.utc)
-                        if entry_dt < cutoff:
-                            continue
+                pub_t = getattr(entry, "published_parsed", None)
+                if cutoff and pub_t:
+                    if datetime(*pub_t[:6], tzinfo=timezone.utc) < cutoff:
+                        continue
                 title = getattr(entry, "title", "") or ""
                 summary = getattr(entry, "summary", "") or ""
                 combined = (title + " " + summary).lower()
@@ -799,6 +852,7 @@ def search_feeds_by_topic(
                             "url": link,
                             "title": title,
                             "source": f"feed:{feed.name}",
+                            "published_at": _pub_str(pub_t),
                         })
         except Exception:
             continue
@@ -807,9 +861,12 @@ def search_feeds_by_topic(
 
 
 def _import_single_article(
-    session_id: int, url: str, title: str, topic: str, seen_urls: set, min_score: int = 1
+    session_id: int, url: str, title: str, topic: str, seen_urls: set,
+    min_score: int = 1, published_at: str = ""
 ) -> dict | None:
-    """Fetch description, score, and insert one research article. Returns dict or None if skipped."""
+    """Resolve URL, fetch page, score, and insert one research article."""
+    url = resolve_url(url)
+
     if url in seen_urls:
         return None
     seen_urls.add(url)
@@ -817,17 +874,64 @@ def _import_single_article(
     if ResearchArticle.query.filter_by(session_id=session_id, url=url).first():
         return None
 
-    description = fetch_article_description(url)
+    description = ""
+    pub_dt: datetime | None = None
 
-    if not title or title == url:
+    # Use passed-in date if available (from feedparser / GDELT)
+    if published_at:
         try:
-            resp = req_lib.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=8)
-            m = re.search(r'<title[^>]*>(.*?)</title>', resp.text, re.IGNORECASE | re.DOTALL)
+            pub_dt = datetime.fromisoformat(published_at.replace("Z", "+00:00"))
+        except Exception:
+            pass
+
+    # Single page fetch — extract title, description, and pub date together
+    try:
+        resp = req_lib.get(
+            url,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                ),
+                "Accept": "text/html,application/xhtml+xml",
+            },
+            timeout=10,
+        )
+        raw = resp.text
+        url = resp.url  # capture final URL after any further redirects
+
+        # Title
+        if not title or title == url:
+            m = re.search(r'<title[^>]*>(.*?)</title>', raw, re.IGNORECASE | re.DOTALL)
             if m:
                 title = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', '', m.group(1))).strip()
                 title = html_lib.unescape(title)[:255]
-        except Exception:
-            pass
+
+        # Description
+        for pat in [
+            r'<meta[^>]+name=["\']description["\'][^>]+content=["\']([^"\']{30,})["\']',
+            r'<meta[^>]+content=["\']([^"\']{30,})["\'][^>]+name=["\']description["\']',
+            r'<meta[^>]+property=["\']og:description["\'][^>]+content=["\']([^"\']{30,})["\']',
+            r'<meta[^>]+content=["\']([^"\']{30,})["\'][^>]+property=["\']og:description["\']',
+        ]:
+            m = re.search(pat, raw, re.IGNORECASE)
+            if m:
+                description = html_lib.unescape(m.group(1).strip())
+                break
+
+        if not description:
+            for p in re.findall(r'<p[^>]*>(.*?)</p>', raw, re.DOTALL | re.IGNORECASE):
+                text = re.sub(r'\s+', ' ', html_lib.unescape(re.sub(r'<[^>]+>', '', p))).strip()
+                if len(text) > 100:
+                    description = text[:300]
+                    break
+
+        # Published date (only if not already set from feed)
+        if not pub_dt:
+            pub_dt = _parse_pub_date(raw)
+
+    except Exception:
+        pass
 
     score = score_article_for_topic(topic, title or url, description)
 
@@ -840,6 +944,7 @@ def _import_single_article(
         title=title or url,
         description=description,
         relevance_score=score,
+        published_at=pub_dt,
         status="unreviewed",
     )
     db.session.add(article)
@@ -929,6 +1034,7 @@ def run_research_search(app, job_id: int, session_id: int, topic: str, opts: Sea
                         topic,
                         seen_urls,
                         opts.min_score,
+                        candidate.get("published_at", ""),
                     )
                     if result:
                         imported += 1

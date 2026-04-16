@@ -355,7 +355,20 @@
     }
     .filter-btn.active { color: var(--charcoal); border-color: #888; background: var(--white); }
     .filter-btn:hover { color: var(--charcoal); border-color: #888; }
-    .stats-right { margin-left: auto; display: flex; gap: 6px; }
+    .stats-right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+    .sort-select {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      border: 1px solid #ddd;
+      background: none;
+      padding: 4px 8px;
+      color: var(--gray);
+      cursor: pointer;
+      outline: none;
+    }
+    .sort-select:focus { border-color: var(--red); color: var(--charcoal); }
 
     /* ── Advanced search options ── */
     .adv-toggle {
@@ -915,6 +928,13 @@
     <button class="filter-btn" data-filter="maybe" onclick="setFilter('maybe', this)">Maybe</button>
     <button class="filter-btn" data-filter="skip" onclick="setFilter('skip', this)">Skip</button>
     <div class="stats-right">
+      <select class="sort-select" id="sort-select" onchange="setSort(this.value)">
+        <option value="score">Score ↓</option>
+        <option value="smart">Smart</option>
+        <option value="date_desc">Newest</option>
+        <option value="date_asc">Oldest</option>
+        <option value="source">Source</option>
+      </select>
       <span class="import-hint" id="showing-label"></span>
     </div>
   </div>
@@ -968,6 +988,37 @@
   let currentSessionId = null;
   let allArticles = [];
   let currentFilter = 'all';
+  let currentSort = 'score';
+
+  function setSort(sort) {
+    currentSort = sort;
+    renderArticles();
+  }
+
+  function sortArticles(articles) {
+    const now = Date.now();
+    return [...articles].sort((a, b) => {
+      switch (currentSort) {
+        case 'date_desc':
+          return (new Date(b.published_at || 0)) - (new Date(a.published_at || 0));
+        case 'date_asc':
+          return (new Date(a.published_at || 0)) - (new Date(b.published_at || 0));
+        case 'source':
+          return domainOf(a.url).localeCompare(domainOf(b.url));
+        case 'smart': {
+          const weight = dt => {
+            if (!dt) return 0.85;
+            const days = (now - new Date(dt)) / 86400000;
+            return days > 30 ? 0.7 : 1.0;
+          };
+          return ((b.relevance_score || 5) * weight(b.published_at)) -
+                 ((a.relevance_score || 5) * weight(a.published_at));
+        }
+        default: // score
+          return (b.relevance_score || 0) - (a.relevance_score || 0);
+      }
+    });
+  }
 
   // ── Utility ──────────────────────────────────────────────────────────────────
 
@@ -1116,9 +1167,11 @@
     const list = document.getElementById('article-list');
     focusedIndex = -1;
 
-    const visible = currentFilter === 'all'
+    const filtered = currentFilter === 'all'
       ? allArticles
       : allArticles.filter(a => a.status === currentFilter);
+
+    const visible = sortArticles(filtered);
 
     document.getElementById('showing-label').textContent =
       visible.length === allArticles.length
@@ -1132,8 +1185,10 @@
     }
 
     // Split: high relevance (≥5 or unscored) vs low (<5)
-    const high = visible.filter(a => !a.relevance_score || a.relevance_score >= 5);
-    const low  = visible.filter(a => a.relevance_score && a.relevance_score < 5);
+    // When sorting by source or date, don't collapse low-score articles — show everything flat
+    const splitByScore = (currentSort === 'score' || currentSort === 'smart');
+    const high = splitByScore ? visible.filter(a => !a.relevance_score || a.relevance_score >= 5) : visible;
+    const low  = splitByScore ? visible.filter(a => a.relevance_score && a.relevance_score < 5) : [];
 
     high.forEach(a => list.appendChild(buildArticleRow(a)));
 
