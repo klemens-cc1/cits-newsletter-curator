@@ -23,7 +23,7 @@ class SearchOptions:
     topic: str
     date_days: int | None = None   # None = all time; else last N days
     min_score: int = 1             # discard articles scoring below this
-    max_results: int = 200         # cap total articles imported
+    max_results: int = 50          # cap total articles imported
 
 
 def current_week_key():
@@ -721,15 +721,14 @@ def resolve_url(url: str) -> str:
             blob = m.group(1)
             blob += '=' * (-len(blob) % 4)          # restore padding
             decoded = base64.urlsafe_b64decode(blob)
-            for prefix in (b'https://', b'http://'):
-                idx = decoded.find(prefix)
-                if idx >= 0:
-                    end = idx
-                    while end < len(decoded) and 0x20 <= decoded[end] < 0x7f:
-                        end += 1
-                    candidate = decoded[idx:end].decode('ascii', errors='replace').rstrip('/')
-                    if len(candidate) > 15 and 'news.google.com' not in candidate:
-                        return candidate
+            # The real URL is a UTF-8 string inside the protobuf blob.
+            # Convert to text and extract the first valid URL with a regex.
+            text = decoded.decode('utf-8', errors='replace')
+            url_match = re.search(r'(https?://[^\s\x00-\x1f"\'<>\\]+)', text)
+            if url_match:
+                candidate = url_match.group(1).rstrip('/')
+                if 'news.google.com' not in candidate and len(candidate) > 15:
+                    return candidate
     except Exception:
         pass
 
@@ -1120,7 +1119,7 @@ def start_research_search(session_id):
         topic=session.topic,
         date_days=date_map.get(data.get('date_range', ''), None),
         min_score=max(1, min(9, int(data.get('min_score', 1)))),
-        max_results=max(10, min(500, int(data.get('max_results', 200)))),
+        max_results=max(10, min(500, int(data.get('max_results', 50)))),
     )
     t = threading.Thread(
         target=run_research_search,
