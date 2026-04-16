@@ -1,3 +1,4 @@
+import base64
 import csv
 import io
 import os
@@ -704,17 +705,46 @@ Return ONLY the 4 queries, one per line. No numbering, no explanation, no quotes
 
 
 def resolve_url(url: str) -> str:
-    """Follow redirects on aggregator wrapper URLs to get the real destination."""
+    """Decode Google News RSS wrapper URLs to the real article URL.
+
+    Google News encodes the destination URL inside a base64url protobuf blob
+    in the /rss/articles/<blob> path segment. We decode it directly — no HTTP
+    request needed. Falls back to a GET request if decoding fails.
+    """
     if 'news.google.com' not in url:
         return url
+
+    # ── Strategy 1: decode the base64 blob embedded in the URL ──────────────
     try:
-        resp = req_lib.head(
-            url, allow_redirects=True, timeout=8,
+        m = re.search(r'news\.google\.com/rss/articles/([A-Za-z0-9_-]+)', url)
+        if m:
+            blob = m.group(1)
+            blob += '=' * (-len(blob) % 4)          # restore padding
+            decoded = base64.urlsafe_b64decode(blob)
+            for prefix in (b'https://', b'http://'):
+                idx = decoded.find(prefix)
+                if idx >= 0:
+                    end = idx
+                    while end < len(decoded) and 0x20 <= decoded[end] < 0x7f:
+                        end += 1
+                    candidate = decoded[idx:end].decode('ascii', errors='replace').rstrip('/')
+                    if len(candidate) > 15 and 'news.google.com' not in candidate:
+                        return candidate
+    except Exception:
+        pass
+
+    # ── Strategy 2: follow redirect via GET (slower but catches edge cases) ──
+    try:
+        resp = req_lib.get(
+            url, allow_redirects=True, timeout=10,
             headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
         )
-        return resp.url or url
+        if 'news.google.com' not in resp.url:
+            return resp.url
     except Exception:
-        return url
+        pass
+
+    return url  # give up — caller will get news.google.com content
 
 
 def _parse_pub_date(raw_html: str) -> datetime | None:
