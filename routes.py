@@ -705,52 +705,73 @@ Return ONLY the 4 queries, one per line. No numbering, no explanation, no quotes
 
 
 def resolve_url(url: str) -> str:
-    """Decode Google News RSS wrapper URLs to the real article URL.
-
-    Google News encodes the destination URL inside a base64url protobuf blob
-    in the /rss/articles/<blob> path segment. We decode it directly — no HTTP
-    request needed. Falls back to a GET request if decoding fails.
-    """
+    """Decode Google News RSS wrapper URLs to the real article URL."""
     if 'news.google.com' not in url:
         return url
 
-    # ── Strategy 1: decode the base64 blob embedded in the URL ──────────────
-    # The URL is stored as a raw ASCII string inside the protobuf bytes.
-    # Scan the raw bytes directly for http(s):// — avoids UTF-8 decode issues
-    # where protobuf structural bytes (0x22 = '"', 0x5c = '\') would terminate
-    # a text-level regex before the URL is reached.
+    # ── Strategy 1: base64 blob decode ───────────────────────────────────────
+    # Google News encodes the destination in a base64url protobuf blob.
+    # Scan every https:// occurrence in the decoded bytes and return the first
+    # that is not itself a news.google.com URL (the blob may contain a Google
+    # canonical URL before the real article URL).
     try:
-        m = re.search(r'news\.google\.com/rss/articles/([A-Za-z0-9_-]+)', url)
+        # Accept /rss/articles/, /articles/, /read/, or any path segment
+        m = re.search(r'news\.google\.com/(?:[^/?#]*/)*([A-Za-z0-9_-]{20,})(?:[?#]|$)', url)
         if m:
-            blob = m.group(1)
-            blob += '=' * (-len(blob) % 4)
+            blob = m.group(1) + '=' * (-len(m.group(1)) % 4)
             decoded = base64.urlsafe_b64decode(blob)
-            for prefix in (b'https://', b'http://'):
-                idx = decoded.find(prefix)
-                if idx != -1:
-                    # Walk forward through printable ASCII, stop at separators
-                    end = idx
-                    while end < len(decoded) and 33 <= decoded[end] <= 126 \
-                            and decoded[end] not in b'"\'<>\\ \t':
-                        end += 1
-                    candidate = decoded[idx:end].decode('ascii').rstrip('.,;)')
-                    if 'news.google.com' not in candidate and len(candidate) > 15:
-                        return candidate
+            pos = 0
+            while True:
+                idx = decoded.find(b'https://', pos)
+                if idx == -1:
+                    break
+                end = idx
+                while end < len(decoded) and 33 <= decoded[end] <= 126 \
+                        and decoded[end] not in b'"\'<>\\ \t':
+                    end += 1
+                candidate = decoded[idx:end].decode('ascii', errors='replace').rstrip('.,;)')
+                if 'news.google.com' not in candidate and len(candidate) > 15:
+                    return candidate
+                pos = idx + 8  # skip past this match, try next occurrence
     except Exception:
         pass
 
-    # ── Strategy 2: follow redirect via GET (slower but catches edge cases) ──
+    # ── Strategy 2: GET viewer page, parse real URL from HTML ────────────────
+    # Google's viewer page embeds the article URL in a data-n-au attribute and
+    # sometimes in a window.location JS assignment. HEAD/GET on the RSS URL
+    # won't HTTP-redirect because Google uses JavaScript redirects.
     try:
+        viewer = re.sub(r'/rss/articles/', '/articles/', url.split('?')[0])
         resp = req_lib.get(
-            url, allow_redirects=True, timeout=10,
-            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+            viewer, allow_redirects=True, timeout=10,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                              "AppleWebKit/537.36 (KHTML, like Gecko) "
+                              "Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml",
+                "Referer": "https://news.google.com/",
+            },
         )
         if 'news.google.com' not in resp.url:
             return resp.url
+        html = resp.text
+        # data-n-au is the most reliable carrier of the article URL
+        ma = re.search(r'data-n-au="([^"]+)"', html)
+        if ma and 'news.google.com' not in ma.group(1):
+            return ma.group(1)
+        # JavaScript redirect fallbacks
+        for pat in (
+            r'window\.location\s*=\s*["\']([^"\']+)["\']',
+            r'location\.href\s*=\s*["\']([^"\']+)["\']',
+            r'"url"\s*:\s*"(https?://[^"]+)"',
+        ):
+            mb = re.search(pat, html)
+            if mb and 'news.google.com' not in mb.group(1):
+                return mb.group(1)
     except Exception:
         pass
 
-    return url  # give up — caller will get news.google.com content
+    return url
 
 
 def _parse_pub_date(raw_html: str) -> datetime | None:
