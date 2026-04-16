@@ -25,5 +25,20 @@ def create_app():
 
     with app.app_context():
         db.create_all()
+        _run_migrations(db)
 
     return app
+
+
+def _run_migrations(db):
+    """Apply additive schema changes that db.create_all() won't handle."""
+    migrations = [
+        "ALTER TABLE research_articles ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ",
+    ]
+    try:
+        with db.engine.connect() as conn:
+            for sql in migrations:
+                conn.execute(db.text(sql))
+            conn.commit()
+    except Exception:
+        pass  # SQLite (local dev) doesn't support IF NOT EXISTS — safe to ignore
