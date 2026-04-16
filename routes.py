@@ -715,20 +715,27 @@ def resolve_url(url: str) -> str:
         return url
 
     # ── Strategy 1: decode the base64 blob embedded in the URL ──────────────
+    # The URL is stored as a raw ASCII string inside the protobuf bytes.
+    # Scan the raw bytes directly for http(s):// — avoids UTF-8 decode issues
+    # where protobuf structural bytes (0x22 = '"', 0x5c = '\') would terminate
+    # a text-level regex before the URL is reached.
     try:
         m = re.search(r'news\.google\.com/rss/articles/([A-Za-z0-9_-]+)', url)
         if m:
             blob = m.group(1)
-            blob += '=' * (-len(blob) % 4)          # restore padding
+            blob += '=' * (-len(blob) % 4)
             decoded = base64.urlsafe_b64decode(blob)
-            # The real URL is a UTF-8 string inside the protobuf blob.
-            # Convert to text and extract the first valid URL with a regex.
-            text = decoded.decode('utf-8', errors='replace')
-            url_match = re.search(r'(https?://[^\s\x00-\x1f"\'<>\\]+)', text)
-            if url_match:
-                candidate = url_match.group(1).rstrip('/')
-                if 'news.google.com' not in candidate and len(candidate) > 15:
-                    return candidate
+            for prefix in (b'https://', b'http://'):
+                idx = decoded.find(prefix)
+                if idx != -1:
+                    # Walk forward through printable ASCII, stop at separators
+                    end = idx
+                    while end < len(decoded) and 33 <= decoded[end] <= 126 \
+                            and decoded[end] not in b'"\'<>\\ \t':
+                        end += 1
+                    candidate = decoded[idx:end].decode('ascii').rstrip('.,;)')
+                    if 'news.google.com' not in candidate and len(candidate) > 15:
+                        return candidate
     except Exception:
         pass
 

@@ -1496,7 +1496,7 @@
 
     const dateRange  = document.getElementById('adv-date-range')?.value  || '';
     const minScore   = parseInt(document.getElementById('adv-min-score')?.value  || '1');
-    const maxResults = parseInt(document.getElementById('adv-max-results')?.value || '200');
+    const maxResults = parseInt(document.getElementById('adv-max-results')?.value || '50');
 
     try {
       const res = await fetch(`/api/research/sessions/${currentSessionId}/search`, {
