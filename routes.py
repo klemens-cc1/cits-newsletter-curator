@@ -908,10 +908,105 @@ def search_feeds_by_topic(
     return results
 
 
+def search_arxiv(query: str, date_days: int | None = None) -> list[dict]:
+    """Search arXiv preprint server via its Atom API."""
+    encoded = urllib.parse.quote(f"all:{query}")
+    url = (
+        f"http://export.arxiv.org/api/query"
+        f"?search_query={encoded}&start=0&max_results=25&sortBy=relevance"
+    )
+    try:
+        feed = fp_lib.parse(url)
+        results = []
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=date_days)) if date_days else None
+        for entry in feed.entries:
+            link = getattr(entry, 'id', '') or ''
+            # Normalise to https abs URL
+            link = link.replace('http://arxiv.org/', 'https://arxiv.org/')
+            title_raw = (getattr(entry, 'title', '') or '').replace('\n', ' ').strip()
+            summary = (getattr(entry, 'summary', '') or '').replace('\n', ' ').strip()
+            summary = re.sub(r'\s+', ' ', summary)[:500]
+            pub_t = getattr(entry, 'published_parsed', None)
+            pub_str = _pub_str(pub_t)
+            if cutoff and pub_t:
+                try:
+                    if datetime(*pub_t[:6], tzinfo=timezone.utc) < cutoff:
+                        continue
+                except Exception:
+                    pass
+            if link:
+                results.append({
+                    'url': link,
+                    'title': title_raw,
+                    'description': summary,
+                    'source': 'arxiv',
+                    'source_name': 'arXiv',
+                    'published_at': pub_str,
+                })
+        return results
+    except Exception:
+        return []
+
+
+def search_osti(query: str, date_days: int | None = None) -> list[dict]:
+    """Search OSTI.gov (US Dept of Energy) publications via their JSON API."""
+    params: dict = {
+        'q': query,
+        'rows': 25,
+        'sort': 'score desc',
+    }
+    if date_days:
+        params['date_range_start'] = (
+            datetime.now(timezone.utc) - timedelta(days=date_days)
+        ).strftime('%Y-%m-%d')
+    try:
+        resp = req_lib.get(
+            'https://www.osti.gov/api/v1/records',
+            params=params,
+            headers={'Accept': 'application/json'},
+            timeout=20,
+        )
+        records = resp.json()
+        if not isinstance(records, list):
+            return []
+        results = []
+        for rec in records:
+            doi = (rec.get('doi') or '').strip()
+            osti_id = rec.get('osti_id') or ''
+            article_url = f'https://doi.org/{doi}' if doi else (
+                f'https://www.osti.gov/biblio/{osti_id}' if osti_id else ''
+            )
+            if not article_url:
+                continue
+            title_raw = (rec.get('title') or '').strip()
+            abstract = re.sub(r'\s+', ' ', (rec.get('description') or '').strip())[:500]
+            pub_date = (rec.get('publication_date') or '')[:10]
+            pub_str = ''
+            if pub_date:
+                try:
+                    pub_str = datetime.strptime(pub_date, '%Y-%m-%d').replace(
+                        tzinfo=timezone.utc).isoformat()
+                except Exception:
+                    pass
+            if title_raw:
+                results.append({
+                    'url': article_url,
+                    'title': title_raw,
+                    'description': abstract,
+                    'source': 'osti',
+                    'source_name': 'OSTI.gov',
+                    'published_at': pub_str,
+                })
+        return results
+    except Exception:
+        return []
+
+
 def _import_single_article(
     session_id: int, url: str, title: str, topic: str, seen_urls: set,
     min_score: int = 1, published_at: str = "", source_name: str = "",
-    must_include: list = None, must_exclude: list = None, english_only: bool = False
+    must_include: list = None, must_exclude: list = None, english_only: bool = False,
+    pre_description: str = "",
 ) -> dict | None:
     """Resolve URL, fetch page, score, and insert one research article."""
     url = resolve_url(url)
@@ -923,10 +1018,10 @@ def _import_single_article(
     if ResearchArticle.query.filter_by(session_id=session_id, url=url).first():
         return None
 
-    description = ""
+    description = pre_description
     pub_dt: datetime | None = None
 
-    # Use passed-in date if available (from feedparser / GDELT)
+    # Use passed-in date if available (from feedparser / GDELT / arXiv / OSTI)
     if published_at:
         try:
             pub_dt = datetime.fromisoformat(published_at.replace("Z", "+00:00"))
@@ -944,10 +1039,9 @@ def _import_single_article(
     if is_gnews and source_name and title and not re.search(r'\s+-\s+\S', title[-50:]):
         title = f"{title} - {source_name}"
 
-    # Single page fetch — extract title, description, and pub date together.
-    # Skip for Google News wrapper URLs: their pages only return boilerplate
-    # and the blob encoding is now server-side encrypted, so we can't resolve.
-    if not is_gnews:
+    # Skip page fetch when the caller already supplied a description (e.g. arXiv
+    # abstract, OSTI abstract) — we have everything we need from the API.
+    if not is_gnews and not pre_description:
         try:
             resp = req_lib.get(
                 url,
@@ -1083,6 +1177,15 @@ def run_research_search(app, job_id: int, session_id: int, topic: str, opts: Sea
             update_job(5, "Scanning specialist RSS feeds…")
             all_candidates.extend(search_feeds_by_topic(topic, keywords, opts.date_days))
 
+            # Phase 6 — arXiv
+            update_job(6, "Searching arXiv preprints…")
+            for q in queries[:2]:   # limit to 2 queries to stay within rate limit
+                all_candidates.extend(search_arxiv(q, opts.date_days))
+
+            # Phase 7 — OSTI
+            update_job(7, "Searching OSTI.gov (DOE research)…")
+            all_candidates.extend(search_osti(topic, opts.date_days))
+
             # Deduplicate
             seen: set[str] = set()
             unique_candidates = []
@@ -1092,10 +1195,10 @@ def run_research_search(app, job_id: int, session_id: int, topic: str, opts: Sea
                     seen.add(url)
                     unique_candidates.append(c)
 
-            update_job(5, "Scanning specialist RSS feeds…", urls_found=len(unique_candidates))
+            update_job(7, "Searching OSTI.gov (DOE research)…", urls_found=len(unique_candidates))
 
-            # Phase 6 — Score and import (filtered by min_score, capped at max_results)
-            update_job(6, f"Scoring {len(unique_candidates)} articles…",
+            # Phase 8 — Score and import (filtered by min_score, capped at max_results)
+            update_job(8, f"Scoring {len(unique_candidates)} articles…",
                        urls_found=len(unique_candidates))
 
             # Build feed→type cache once so Phase 6 doesn't hit the DB per article
@@ -1123,6 +1226,8 @@ def run_research_search(app, job_id: int, session_id: int, topic: str, opts: Sea
                         src = candidate.get('source', '')
                         if src in ('google_news', 'yahoo_news', 'gdelt'):
                             stype = 'news'
+                        elif src in ('arxiv', 'osti'):
+                            stype = 'academic'
                         elif src.startswith('feed:'):
                             stype = feed_type_cache.get(src[5:], 'news')
                         else:
@@ -1142,6 +1247,7 @@ def run_research_search(app, job_id: int, session_id: int, topic: str, opts: Sea
                         opts.must_include,
                         opts.must_exclude,
                         opts.english_only,
+                        candidate.get("description", ""),
                     )
                     if result:
                         imported += 1
@@ -1149,6 +1255,7 @@ def run_research_search(app, job_id: int, session_id: int, topic: str, opts: Sea
                         db.session.commit()
                         job = ResearchJob.query.get(job_id)
                         if job:
+                            job.phase_num = 8
                             job.phase = f"Scoring articles… ({i}/{len(unique_candidates)})"
                             db.session.commit()
                 except Exception:
@@ -1184,7 +1291,7 @@ def start_research_search(session_id):
         status="pending",
         phase="Starting…",
         phase_num=0,
-        total_phases=6,
+        total_phases=8,
         urls_found=0,
     )
     db.session.add(job)

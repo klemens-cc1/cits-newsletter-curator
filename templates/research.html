@@ -1140,7 +1140,9 @@
         <div class="phase-step" id="phase-3">3 &middot; Yahoo News</div>
         <div class="phase-step" id="phase-4">4 &middot; GDELT</div>
         <div class="phase-step" id="phase-5">5 &middot; RSS Feeds</div>
-        <div class="phase-step" id="phase-6">6 &middot; Score &amp; Import</div>
+        <div class="phase-step" id="phase-6">6 &middot; arXiv</div>
+        <div class="phase-step" id="phase-7">7 &middot; OSTI</div>
+        <div class="phase-step" id="phase-8">8 &middot; Score &amp; Import</div>
       </div>
       <div class="search-status-row">
         <span class="search-status-text" id="search-status-text">Starting…</span>
@@ -1808,7 +1810,7 @@
     document.getElementById('search-progress').style.display = '';
     document.getElementById('search-status-text').textContent = 'Starting…';
     document.getElementById('search-found').textContent = '';
-    for (let i = 1; i <= 6; i++) {
+    for (let i = 1; i <= 8; i++) {
       const el = document.getElementById(`phase-${i}`);
       if (el) el.className = 'phase-step';
     }
@@ -1860,7 +1862,7 @@
         document.getElementById('search-found').textContent = `${job.urls_found} articles found`;
       }
 
-      for (let i = 1; i <= 6; i++) {
+      for (let i = 1; i <= 8; i++) {
         const el = document.getElementById(`phase-${i}`);
         if (!el) continue;
         if (i < job.phase_num)      el.className = 'phase-step done';
