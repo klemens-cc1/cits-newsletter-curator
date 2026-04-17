@@ -1,4 +1,3 @@
-import base64
 import csv
 import io
 import os
@@ -705,72 +704,14 @@ Return ONLY the 4 queries, one per line. No numbering, no explanation, no quotes
 
 
 def resolve_url(url: str) -> str:
-    """Decode Google News RSS wrapper URLs to the real article URL."""
-    if 'news.google.com' not in url:
-        return url
+    """Return the real article URL, resolving wrappers where possible.
 
-    # ── Strategy 1: base64 blob decode ───────────────────────────────────────
-    # Google News encodes the destination in a base64url protobuf blob.
-    # Scan every https:// occurrence in the decoded bytes and return the first
-    # that is not itself a news.google.com URL (the blob may contain a Google
-    # canonical URL before the real article URL).
-    try:
-        # Accept /rss/articles/, /articles/, /read/, or any path segment
-        m = re.search(r'news\.google\.com/(?:[^/?#]*/)*([A-Za-z0-9_-]{20,})(?:[?#]|$)', url)
-        if m:
-            blob = m.group(1) + '=' * (-len(m.group(1)) % 4)
-            decoded = base64.urlsafe_b64decode(blob)
-            pos = 0
-            while True:
-                idx = decoded.find(b'https://', pos)
-                if idx == -1:
-                    break
-                end = idx
-                while end < len(decoded) and 33 <= decoded[end] <= 126 \
-                        and decoded[end] not in b'"\'<>\\ \t':
-                    end += 1
-                candidate = decoded[idx:end].decode('ascii', errors='replace').rstrip('.,;)')
-                if 'news.google.com' not in candidate and len(candidate) > 15:
-                    return candidate
-                pos = idx + 8  # skip past this match, try next occurrence
-    except Exception:
-        pass
-
-    # ── Strategy 2: GET viewer page, parse real URL from HTML ────────────────
-    # Google's viewer page embeds the article URL in a data-n-au attribute and
-    # sometimes in a window.location JS assignment. HEAD/GET on the RSS URL
-    # won't HTTP-redirect because Google uses JavaScript redirects.
-    try:
-        viewer = re.sub(r'/rss/articles/', '/articles/', url.split('?')[0])
-        resp = req_lib.get(
-            viewer, allow_redirects=True, timeout=10,
-            headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                              "AppleWebKit/537.36 (KHTML, like Gecko) "
-                              "Chrome/120.0.0.0 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml",
-                "Referer": "https://news.google.com/",
-            },
-        )
-        if 'news.google.com' not in resp.url:
-            return resp.url
-        html = resp.text
-        # data-n-au is the most reliable carrier of the article URL
-        ma = re.search(r'data-n-au="([^"]+)"', html)
-        if ma and 'news.google.com' not in ma.group(1):
-            return ma.group(1)
-        # JavaScript redirect fallbacks
-        for pat in (
-            r'window\.location\s*=\s*["\']([^"\']+)["\']',
-            r'location\.href\s*=\s*["\']([^"\']+)["\']',
-            r'"url"\s*:\s*"(https?://[^"]+)"',
-        ):
-            mb = re.search(pat, html)
-            if mb and 'news.google.com' not in mb.group(1):
-                return mb.group(1)
-    except Exception:
-        pass
-
+    Google News blobs are now server-side encrypted — base64 decode no longer
+    works and the viewer API returns 400. We keep this function as a no-op for
+    Google News URLs so callers don't need to change; the real source name is
+    extracted from the RSS title suffix in _import_single_article and on the
+    frontend.
+    """
     return url
 
 
@@ -941,54 +882,63 @@ def _import_single_article(
         except Exception:
             pass
 
-    # Single page fetch — extract title, description, and pub date together
-    try:
-        resp = req_lib.get(
-            url,
-            headers={
-                "User-Agent": (
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                ),
-                "Accept": "text/html,application/xhtml+xml",
-            },
-            timeout=10,
-        )
-        raw = resp.text
-        url = resp.url  # capture final URL after any further redirects
+    # Skip page fetch for Google News wrapper URLs — their pages only return
+    # boilerplate ("Comprehensive up-to-date news coverage...") and the real
+    # article URL cannot be recovered server-side (blob encoding is encrypted).
+    # Title and published_at are already available from the RSS feed.
+    is_gnews = 'news.google.com' in url
 
-        # Title
-        if not title or title == url:
-            m = re.search(r'<title[^>]*>(.*?)</title>', raw, re.IGNORECASE | re.DOTALL)
-            if m:
-                title = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', '', m.group(1))).strip()
-                title = html_lib.unescape(title)[:255]
+    # Single page fetch — extract title, description, and pub date together.
+    # Skip for Google News wrapper URLs: their pages only return boilerplate
+    # and the blob encoding is now server-side encrypted, so we can't resolve.
+    if not is_gnews:
+        try:
+            resp = req_lib.get(
+                url,
+                headers={
+                    "User-Agent": (
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                    ),
+                    "Accept": "text/html,application/xhtml+xml",
+                },
+                timeout=10,
+            )
+            raw = resp.text
+            url = resp.url  # capture final URL after any further redirects
 
-        # Description
-        for pat in [
-            r'<meta[^>]+name=["\']description["\'][^>]+content=["\']([^"\']{30,})["\']',
-            r'<meta[^>]+content=["\']([^"\']{30,})["\'][^>]+name=["\']description["\']',
-            r'<meta[^>]+property=["\']og:description["\'][^>]+content=["\']([^"\']{30,})["\']',
-            r'<meta[^>]+content=["\']([^"\']{30,})["\'][^>]+property=["\']og:description["\']',
-        ]:
-            m = re.search(pat, raw, re.IGNORECASE)
-            if m:
-                description = html_lib.unescape(m.group(1).strip())
-                break
+            # Title
+            if not title or title == url:
+                m = re.search(r'<title[^>]*>(.*?)</title>', raw, re.IGNORECASE | re.DOTALL)
+                if m:
+                    title = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', '', m.group(1))).strip()
+                    title = html_lib.unescape(title)[:255]
 
-        if not description:
-            for p in re.findall(r'<p[^>]*>(.*?)</p>', raw, re.DOTALL | re.IGNORECASE):
-                text = re.sub(r'\s+', ' ', html_lib.unescape(re.sub(r'<[^>]+>', '', p))).strip()
-                if len(text) > 100:
-                    description = text[:300]
+            # Description
+            for pat in [
+                r'<meta[^>]+name=["\']description["\'][^>]+content=["\']([^"\']{30,})["\']',
+                r'<meta[^>]+content=["\']([^"\']{30,})["\'][^>]+name=["\']description["\']',
+                r'<meta[^>]+property=["\']og:description["\'][^>]+content=["\']([^"\']{30,})["\']',
+                r'<meta[^>]+content=["\']([^"\']{30,})["\'][^>]+property=["\']og:description["\']',
+            ]:
+                m = re.search(pat, raw, re.IGNORECASE)
+                if m:
+                    description = html_lib.unescape(m.group(1).strip())
                     break
 
-        # Published date (only if not already set from feed)
-        if not pub_dt:
-            pub_dt = _parse_pub_date(raw)
+            if not description:
+                for p in re.findall(r'<p[^>]*>(.*?)</p>', raw, re.DOTALL | re.IGNORECASE):
+                    text = re.sub(r'\s+', ' ', html_lib.unescape(re.sub(r'<[^>]+>', '', p))).strip()
+                    if len(text) > 100:
+                        description = text[:300]
+                        break
 
-    except Exception:
-        pass
+            # Published date (only if not already set from feed)
+            if not pub_dt:
+                pub_dt = _parse_pub_date(raw)
+
+        except Exception:
+            pass
 
     score = score_article_for_topic(topic, title or url, description)
 

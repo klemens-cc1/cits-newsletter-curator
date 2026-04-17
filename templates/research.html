@@ -1004,7 +1004,7 @@
         case 'date_asc':
           return (new Date(a.published_at || 0)) - (new Date(b.published_at || 0));
         case 'source':
-          return domainOf(a.url).localeCompare(domainOf(b.url));
+          return sourceOf(a).localeCompare(sourceOf(b));
         case 'smart': {
           const weight = dt => {
             if (!dt) return 0.85;
@@ -1039,6 +1039,19 @@
 
   function domainOf(url) {
     try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; }
+  }
+
+  // For Google News articles, extract the real source from the title suffix " - Source Name"
+  // Google News RSS always appends this; the URL itself stays news.google.com but the
+  // source name is reliable in the title.
+  function sourceOf(article) {
+    const url = article.url || '';
+    if (url.includes('news.google.com')) {
+      const title = article.title || '';
+      const m = title.match(/\s+-\s+([^-]{2,60})$/);
+      if (m) return m[1].trim();
+    }
+    return domainOf(url);
   }
 
   // ── Session list ──────────────────────────────────────────────────────────────
@@ -1233,7 +1246,7 @@
           <div class="article-title-line">
             <a href="${escHtml(a.url)}" target="_blank" rel="noopener"
                onclick="event.stopPropagation()">${escHtml(a.title || a.url)}</a>
-            <span class="article-source-tag">${escHtml(domainOf(a.url))}</span>
+            <span class="article-source-tag">${escHtml(sourceOf(a))}</span>
           </div>
         </div>
         <div class="article-controls">
