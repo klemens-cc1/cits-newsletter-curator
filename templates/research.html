@@ -287,7 +287,19 @@
       border: 1px solid var(--border);
       padding: 20px 24px;
       margin-bottom: 20px;
-      max-width: 600px;
+    }
+    .import-cols {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+    }
+    .import-side {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 10px;
+      width: 160px;
+      flex-shrink: 0;
     }
     .import-box label {
       display: block;
@@ -301,7 +313,7 @@
       border-bottom: 1px solid var(--border);
     }
     .import-textarea {
-      width: 100%;
+      flex: 1;
       font-family: 'Merriweather', serif;
       font-size: 12px;
       padding: 10px 12px;
@@ -780,10 +792,13 @@
       font-size: 10px;
       letter-spacing: 1px;
       color: #aaa;
-      padding: 6px 0 10px;
+      padding: 6px 14px;
       display: flex;
       gap: 12px;
       align-items: center;
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-bottom: none;
     }
     .kbd {
       display: inline-block;
@@ -972,11 +987,13 @@
 
   <div class="import-box">
     <label>Manual URL Import — paste one per line</label>
-    <textarea id="import-textarea" class="import-textarea"
-              placeholder="https://example.com/article-one&#10;https://example.com/article-two&#10;https://example.com/article-three"></textarea>
-    <div class="import-row">
-      <span class="import-hint" id="import-hint">Each URL will be fetched, described, and scored for relevance.</span>
-      <button class="btn-primary" id="import-btn" onclick="importUrls()">Import URLs</button>
+    <div class="import-cols">
+      <textarea id="import-textarea" class="import-textarea"
+                placeholder="https://example.com/article-one&#10;https://example.com/article-two&#10;https://example.com/article-three"></textarea>
+      <div class="import-side">
+        <span class="import-hint" id="import-hint">Each URL will be fetched, described, and scored for relevance.</span>
+        <button class="btn-primary" id="import-btn" onclick="importUrls()">Import URLs</button>
+      </div>
     </div>
     <div class="import-progress" id="import-progress">
       <div class="progress-bar-wrap"><div class="progress-bar-fill" id="progress-fill"></div></div>
