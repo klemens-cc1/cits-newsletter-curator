@@ -741,6 +741,32 @@ def _pub_str(parsed_time) -> str:
         return ""
 
 
+def _domain_from_url(url: str) -> str:
+    """Return hostname without leading www."""
+    try:
+        h = urllib.parse.urlparse(url).hostname or ''
+        return h[4:] if h.startswith('www.') else h
+    except Exception:
+        return ''
+
+
+def _google_source_fields(entry) -> tuple[str, str]:
+    """Extract (source_name, source_domain) from a feedparser Google News entry.
+
+    Google News RSS items carry <source url="https://publisher.com">Publisher</source>.
+    feedparser exposes this as entry.source = {'value': 'Publisher', 'href': 'https://...'}
+    """
+    src = getattr(entry, 'source', None) or {}
+    if isinstance(src, dict):
+        name = src.get('value') or src.get('name') or ''
+        href = src.get('href') or ''
+    else:
+        name = getattr(src, 'value', '') or ''
+        href = getattr(src, 'href', '') or ''
+    domain = _domain_from_url(href) if href else ''
+    return name.strip(), domain.strip()
+
+
 def search_google_news(query: str, date_days: int | None = None) -> list[dict]:
     """Fetch up to 25 results from Google News RSS for a query."""
     if date_days:
@@ -754,10 +780,19 @@ def search_google_news(query: str, date_days: int | None = None) -> list[dict]:
         for entry in parsed.entries[:25]:
             link = getattr(entry, "link", "") or ""
             title = getattr(entry, "title", "") or ""
+            source_name, source_domain = _google_source_fields(entry)
+            # Guarantee title ends with ' - Source Name' so sourceOf() can display it.
+            # Google News RSS already includes it, but make explicit in case it's absent.
+            if source_name and not re.search(r'\s+-\s+\S', title[-50:]):
+                title = f"{title} - {source_name}"
             if link:
                 results.append({
-                    "url": link, "title": title, "source": "google_news",
+                    "url": link,
+                    "title": title,
+                    "source": "google_news",
                     "published_at": _pub_str(getattr(entry, "published_parsed", None)),
+                    "source_name": source_name,
+                    "source_domain": source_domain,
                 })
         return results
     except Exception:
@@ -860,7 +895,7 @@ def search_feeds_by_topic(
 
 def _import_single_article(
     session_id: int, url: str, title: str, topic: str, seen_urls: set,
-    min_score: int = 1, published_at: str = ""
+    min_score: int = 1, published_at: str = "", source_name: str = ""
 ) -> dict | None:
     """Resolve URL, fetch page, score, and insert one research article."""
     url = resolve_url(url)
@@ -887,6 +922,11 @@ def _import_single_article(
     # article URL cannot be recovered server-side (blob encoding is encrypted).
     # Title and published_at are already available from the RSS feed.
     is_gnews = 'news.google.com' in url
+
+    # Ensure Google News titles carry ' - Source Name' suffix so the frontend
+    # sourceOf() function can display the real publisher instead of news.google.com.
+    if is_gnews and source_name and title and not re.search(r'\s+-\s+\S', title[-50:]):
+        title = f"{title} - {source_name}"
 
     # Single page fetch — extract title, description, and pub date together.
     # Skip for Google News wrapper URLs: their pages only return boilerplate
@@ -1042,6 +1082,7 @@ def run_research_search(app, job_id: int, session_id: int, topic: str, opts: Sea
                         seen_urls,
                         opts.min_score,
                         candidate.get("published_at", ""),
+                        candidate.get("source_name", ""),
                     )
                     if result:
                         imported += 1

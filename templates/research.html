@@ -1041,13 +1041,18 @@
     try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; }
   }
 
-  // For Google News articles, extract the real source from the title suffix " - Source Name"
-  // Google News RSS always appends this; the URL itself stays news.google.com but the
-  // source name is reliable in the title.
+  // Return the real publisher name for an article.
+  // Priority: explicit source_name field → source_domain field →
+  //           parse ' - Publisher' from title suffix → fall back to URL hostname.
+  // Google News RSS carries source info in <source url="...">Name</source>;
+  // we store it as source_name/source_domain and also embed it in the title suffix.
   function sourceOf(article) {
+    if (article.source_name) return article.source_name;
+    if (article.source_domain) return article.source_domain;
     const url = article.url || '';
-    if (url.includes('news.google.com')) {
-      const title = article.title || '';
+    const title = article.title || '';
+    // Google News titles always end with ' - Publisher Name'
+    if (url.includes('news.google.com') || title.match(/\s+-\s+\S/)) {
       const m = title.match(/\s+-\s+([^-]{2,60})$/);
       if (m) return m[1].trim();
     }
