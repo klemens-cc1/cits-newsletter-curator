@@ -287,6 +287,7 @@
       border: 1px solid var(--border);
       padding: 20px 24px;
       margin-bottom: 20px;
+      max-width: 600px;
     }
     .import-box label {
       display: block;
@@ -1632,6 +1633,11 @@
       if (job.status === 'done') {
         clearInterval(searchPoller); searchPoller = null;
         document.getElementById('search-btn').disabled = false;
+        if (job.urls_found === 0) {
+          toast('No articles found — try broadening your search, relaxing filters, or using different keywords.', true);
+          document.getElementById('search-progress').style.display = 'none';
+          return;
+        }
         toast(`Search complete — ${job.urls_found} articles imported`);
         await refreshDetail();
         // Auto-switch to unreviewed so the user goes straight into triage
