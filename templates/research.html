@@ -103,6 +103,149 @@
       color: var(--charcoal);
     }
 
+    /* ── History drawer (list view collapsible) ── */
+    .history-drawer-toggle {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 11px 0;
+      cursor: pointer;
+      user-select: none;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 0;
+    }
+    .history-drawer-toggle:hover .history-drawer-label { color: var(--charcoal); }
+    .history-drawer-label {
+      font-family: 'Oswald', sans-serif;
+      font-size: 11px;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: var(--gray);
+      transition: color 0.15s;
+    }
+    .history-drawer-count {
+      font-family: 'Oswald', sans-serif;
+      font-size: 11px;
+      letter-spacing: 1px;
+      color: var(--charcoal);
+    }
+    .history-drawer-arrow {
+      font-size: 9px;
+      color: var(--gray);
+      margin-left: auto;
+      transition: transform 0.25s ease;
+      line-height: 1;
+    }
+    .history-drawer-arrow.up { transform: rotate(180deg); }
+    .history-drawer-body {
+      overflow: hidden;
+      max-height: 2000px;
+      transition: max-height 0.35s ease;
+    }
+    .history-drawer-body.closed { max-height: 0; }
+
+    /* ── History panel in detail view ── */
+    .history-panel {
+      background: var(--white);
+      border: 1px solid var(--border);
+      margin-bottom: 20px;
+    }
+    .history-panel-toggle {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 9px 16px;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.1s;
+    }
+    .history-panel-toggle:hover { background: #fafafa; }
+    .history-panel-label {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: var(--gray);
+    }
+    .history-panel-count {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 1px;
+      color: var(--charcoal);
+    }
+    .history-panel-cta {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 1px;
+      color: var(--gray);
+      margin-left: auto;
+      margin-right: 8px;
+    }
+    .history-panel-arrow {
+      font-size: 9px;
+      color: var(--gray);
+      transition: transform 0.25s ease;
+      line-height: 1;
+    }
+    .history-panel-arrow.open { transform: rotate(180deg); }
+    .history-panel-body {
+      overflow: hidden;
+      max-height: 0;
+      transition: max-height 0.35s ease;
+    }
+    .history-panel-body.open {
+      max-height: 560px;
+      overflow-y: auto;
+      border-top: 1px solid var(--border);
+    }
+    .history-mini-card {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .history-mini-card:last-child { border-bottom: none; }
+    .history-mini-card:hover { background: #fafafa; }
+    .history-mini-card.active {
+      background: var(--selected);
+      border-left: 3px solid var(--red);
+      padding-left: 13px;
+    }
+    .history-mini-topic {
+      font-family: 'Merriweather', serif;
+      font-size: 13px;
+      font-weight: 400;
+      flex: 1;
+    }
+    .history-mini-meta {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 0.5px;
+      color: var(--gray);
+      white-space: nowrap;
+    }
+    .history-mini-meta span { color: var(--charcoal); }
+
+    /* ── Sort bar (moved from filter-bar) ── */
+    .sort-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+      padding: 0 2px;
+    }
+    .sort-bar-label {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--gray);
+    }
+
     /* ── New session form ── */
     .new-session-box {
       background: var(--white);
@@ -154,14 +297,15 @@
     .session-card {
       background: var(--white);
       border: 1px solid var(--border);
-      padding: 16px 20px;
+      border-left: 3px solid transparent;
+      padding: 14px 20px;
       display: flex;
       align-items: center;
       gap: 16px;
       cursor: pointer;
-      transition: border-color 0.15s;
+      transition: border-color 0.15s, background 0.1s;
     }
-    .session-card:hover { border-color: #bbb; }
+    .session-card:hover { border-left-color: var(--red); background: #fafafa; }
     .session-topic {
       font-family: 'Merriweather', serif;
       font-size: 15px;
@@ -285,9 +429,12 @@
     .import-box {
       background: var(--white);
       border: 1px solid var(--border);
+      border-left: 3px solid var(--border);
       padding: 20px 24px;
       margin-bottom: 20px;
+      transition: border-left-color 0.2s;
     }
+    .import-box:focus-within { border-left-color: var(--red); }
     .import-cols {
       display: flex;
       gap: 16px;
@@ -512,7 +659,7 @@
       flex-shrink: 0;
       width: 28px;
       height: 28px;
-      border-radius: 50%;
+      border-radius: 0;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -802,13 +949,15 @@
     }
     .kbd {
       display: inline-block;
-      background: #f0f0f0;
-      border: 1px solid #ddd;
-      border-bottom-width: 2px;
-      padding: 1px 6px;
+      background: #f5f5f5;
+      border: 1px solid #d5d5d5;
+      padding: 2px 7px;
+      font-family: 'Oswald', sans-serif;
       font-size: 10px;
-      color: #666;
-      line-height: 1.6;
+      font-weight: 400;
+      letter-spacing: 0.5px;
+      color: #555;
+      line-height: 1.5;
     }
 
     /* ── Focused article (keyboard nav) ── */
@@ -871,8 +1020,8 @@
   <div class="header-sub">Research Mode</div>
   <div class="header-divider"></div>
   <a href="/" class="nav-link">Curator</a>
-  <a href="/history" class="nav-link">History</a>
   <a href="/research" class="nav-link active">Research</a>
+  <a href="/history" class="nav-link">History</a>
 </header>
 
 <!-- ── Session list view ── -->
@@ -887,18 +1036,34 @@
     </div>
   </div>
 
-  <div class="section-head">
-    <div class="section-title">Research Sessions</div>
+  <div class="history-drawer-toggle" onclick="toggleHistoryDrawer()" id="history-drawer-toggle">
+    <span class="history-drawer-label">Session History</span>
+    <span class="history-drawer-count" id="history-drawer-count"></span>
+    <span class="history-drawer-arrow up" id="history-drawer-arrow">&#9660;</span>
   </div>
-
-  <div class="session-cards" id="session-cards">
-    <div class="empty-state" id="sessions-empty" style="display:none">No sessions yet — start one above</div>
+  <div class="history-drawer-body" id="history-drawer-body">
+    <div style="padding-top: 14px;">
+      <div class="session-cards" id="session-cards">
+        <div class="empty-state" id="sessions-empty" style="display:none">No sessions yet — start one above</div>
+      </div>
+    </div>
   </div>
 </div>
 
 <!-- ── Session detail view ── -->
 <div class="page" id="session-detail-view">
-  <button class="back-btn" onclick="showListView()">&#8592; All Sessions</button>
+
+  <div class="history-panel" id="history-panel">
+    <div class="history-panel-toggle" onclick="toggleHistoryPanel()">
+      <span class="history-panel-label">Session History</span>
+      <span class="history-panel-count" id="history-panel-count"></span>
+      <span class="history-panel-cta">switch session</span>
+      <span class="history-panel-arrow" id="history-panel-arrow">&#9660;</span>
+    </div>
+    <div class="history-panel-body" id="history-panel-body">
+      <div id="history-mini-cards"></div>
+    </div>
+  </div>
 
   <div class="session-header">
     <div class="session-header-top">
@@ -1001,22 +1166,24 @@
     </div>
   </div>
 
+  <div class="sort-bar">
+    <span class="sort-bar-label">Sort</span>
+    <select class="sort-select" id="sort-select" onchange="setSort(this.value)">
+      <option value="score">Score ↓</option>
+      <option value="smart">Smart</option>
+      <option value="date_desc">Newest</option>
+      <option value="date_asc">Oldest</option>
+      <option value="source">Source</option>
+    </select>
+    <span class="import-hint" id="showing-label" style="margin-left:auto"></span>
+  </div>
+
   <div class="stats-bar" id="filter-bar">
     <button class="filter-btn active" data-filter="all" onclick="setFilter('all', this)">All</button>
     <button class="filter-btn" data-filter="unreviewed" onclick="setFilter('unreviewed', this)">Unreviewed</button>
     <button class="filter-btn" data-filter="selected" onclick="setFilter('selected', this)">Selected</button>
     <button class="filter-btn" data-filter="maybe" onclick="setFilter('maybe', this)">Maybe</button>
     <button class="filter-btn" data-filter="skip" onclick="setFilter('skip', this)">Skip</button>
-    <div class="stats-right">
-      <select class="sort-select" id="sort-select" onchange="setSort(this.value)">
-        <option value="score">Score ↓</option>
-        <option value="smart">Smart</option>
-        <option value="date_desc">Newest</option>
-        <option value="date_asc">Oldest</option>
-        <option value="source">Source</option>
-      </select>
-      <span class="import-hint" id="showing-label"></span>
-    </div>
   </div>
 
   <div class="kbd-hint">
@@ -1132,11 +1299,28 @@
     const url = article.url || '';
     const title = article.title || '';
     if (url.includes('news.google.com')) {
-      console.log('[sourceOf] gnews article — id:', article.id, '| title:', title, '| url:', url.slice(0, 80));
       const m = title.match(/\s+-\s+([^-]{2,60})$/);
       if (m) return m[1].trim();
     }
     return domainOf(url);
+  }
+
+  // ── History drawer / panel toggles ──────────────────────────────────────────
+
+  function toggleHistoryDrawer() {
+    const body  = document.getElementById('history-drawer-body');
+    const arrow = document.getElementById('history-drawer-arrow');
+    const open  = !body.classList.contains('closed');
+    body.classList.toggle('closed', open);
+    arrow.classList.toggle('up', !open);
+  }
+
+  function toggleHistoryPanel() {
+    const body  = document.getElementById('history-panel-body');
+    const arrow = document.getElementById('history-panel-arrow');
+    const open  = body.classList.contains('open');
+    body.classList.toggle('open', !open);
+    arrow.classList.toggle('open', !open);
   }
 
   // ── Session list ──────────────────────────────────────────────────────────────
@@ -1145,16 +1329,26 @@
     const res = await fetch('/api/research/sessions');
     const sessions = await res.json();
     const container = document.getElementById('session-cards');
+    const miniContainer = document.getElementById('history-mini-cards');
     const empty = document.getElementById('sessions-empty');
+
+    // Update count badges
+    const countText = sessions.length === 1 ? '1 session' : `${sessions.length} sessions`;
+    const drawerCount = document.getElementById('history-drawer-count');
+    const panelCount  = document.getElementById('history-panel-count');
+    if (drawerCount) drawerCount.textContent = countText;
+    if (panelCount)  panelCount.textContent  = countText;
 
     // Remove old cards (keep empty state element)
     [...container.querySelectorAll('.session-card')].forEach(el => el.remove());
+    if (miniContainer) miniContainer.innerHTML = '';
 
     if (sessions.length === 0) {
       empty.style.display = '';
     } else {
       empty.style.display = 'none';
       sessions.forEach(s => {
+        // Main session card (list view)
         const card = document.createElement('div');
         card.className = 'session-card';
         card.innerHTML = `
@@ -1168,6 +1362,25 @@
         `;
         card.addEventListener('click', () => openSession(s.id, s.topic));
         container.appendChild(card);
+
+        // Mini card (detail view history panel)
+        if (miniContainer) {
+          const mini = document.createElement('div');
+          mini.className = 'history-mini-card';
+          mini.dataset.sessionId = s.id;
+          if (s.id === currentSessionId) mini.classList.add('active');
+          mini.innerHTML = `
+            <div class="history-mini-topic">${escHtml(s.topic)}</div>
+            <div class="history-mini-meta"><span>${s.article_count}</span> art &nbsp;·&nbsp; <span>${s.selected || 0}</span> sel</div>
+          `;
+          mini.addEventListener('click', () => {
+            // Close panel then open session
+            document.getElementById('history-panel-body').classList.remove('open');
+            document.getElementById('history-panel-arrow').classList.remove('open');
+            openSession(s.id, s.topic);
+          });
+          miniContainer.appendChild(mini);
+        }
       });
     }
   }
@@ -1217,6 +1430,11 @@
   function showListView() {
     document.getElementById('session-list-view').style.display = '';
     document.getElementById('session-detail-view').style.display = 'none';
+    // Ensure history drawer is open when landing on list view
+    const body  = document.getElementById('history-drawer-body');
+    const arrow = document.getElementById('history-drawer-arrow');
+    body.classList.remove('closed');
+    arrow.classList.add('up');
     currentSessionId = null;
   }
 
@@ -1226,6 +1444,10 @@
     document.getElementById('session-list-view').style.display = 'none';
     document.getElementById('session-detail-view').style.display = 'block';
     document.getElementById('import-textarea').value = '';
+    // Mark active mini-card
+    document.querySelectorAll('.history-mini-card').forEach(c => {
+      c.classList.toggle('active', parseInt(c.dataset.sessionId) === id);
+    });
     currentFilter = 'all';
     document.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b.dataset.filter === 'all'));
     await refreshDetail();
