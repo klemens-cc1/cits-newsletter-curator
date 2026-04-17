@@ -1158,6 +1158,17 @@ def get_job_status(job_id):
 
 # ── Debug endpoints (remove after troubleshooting) ────────────────────────────
 
+@bp.route("/api/debug/research/<int:session_id>")
+def debug_research_articles(session_id):
+    """Return raw title + url for first 10 Google News articles in a session."""
+    articles = ResearchArticle.query.filter_by(session_id=session_id).limit(20).all()
+    return jsonify([
+        {"id": a.id, "url": a.url[:80], "title": a.title}
+        for a in articles
+        if a.url and 'news.google.com' in a.url
+    ][:10])
+
+
 @bp.route("/api/debug/env")
 def debug_env():
     key = os.environ.get("GROQ_API_KEY", "NOT SET")

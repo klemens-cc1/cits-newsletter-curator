@@ -1051,8 +1051,8 @@
     if (article.source_domain) return article.source_domain;
     const url = article.url || '';
     const title = article.title || '';
-    // Google News titles always end with ' - Publisher Name'
-    if (url.includes('news.google.com') || title.match(/\s+-\s+\S/)) {
+    if (url.includes('news.google.com')) {
+      console.log('[sourceOf] gnews article — id:', article.id, '| title:', title, '| url:', url.slice(0, 80));
       const m = title.match(/\s+-\s+([^-]{2,60})$/);
       if (m) return m[1].trim();
     }
