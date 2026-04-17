@@ -910,18 +910,21 @@ def search_feeds_by_topic(
 
 def search_arxiv(query: str, date_days: int | None = None) -> list[dict]:
     """Search arXiv preprint server via its Atom API."""
-    encoded = urllib.parse.quote(f"all:{query}")
+    # Only encode the query text — keep 'all:' literal so arXiv parses it correctly
+    encoded_q = urllib.parse.quote(query)
     url = (
-        f"http://export.arxiv.org/api/query"
-        f"?search_query={encoded}&start=0&max_results=25&sortBy=relevance"
+        f"https://export.arxiv.org/api/query"
+        f"?search_query=all:{encoded_q}&start=0&max_results=25&sortBy=relevance"
     )
     try:
-        feed = fp_lib.parse(url)
+        # Fetch with requests for reliable redirect handling, then parse with feedparser
+        resp = req_lib.get(url, timeout=20, headers={'User-Agent': 'cits-curator/1.0'})
+        resp.raise_for_status()
+        feed = fp_lib.parse(resp.content)
         results = []
         cutoff = (datetime.now(timezone.utc) - timedelta(days=date_days)) if date_days else None
         for entry in feed.entries:
             link = getattr(entry, 'id', '') or ''
-            # Normalise to https abs URL
             link = link.replace('http://arxiv.org/', 'https://arxiv.org/')
             title_raw = (getattr(entry, 'title', '') or '').replace('\n', ' ').strip()
             summary = (getattr(entry, 'summary', '') or '').replace('\n', ' ').strip()
@@ -953,7 +956,6 @@ def search_osti(query: str, date_days: int | None = None) -> list[dict]:
     params: dict = {
         'q': query,
         'rows': 25,
-        'sort': 'score desc',
     }
     if date_days:
         params['date_range_start'] = (
@@ -966,20 +968,30 @@ def search_osti(query: str, date_days: int | None = None) -> list[dict]:
             headers={'Accept': 'application/json'},
             timeout=20,
         )
-        records = resp.json()
-        if not isinstance(records, list):
+        resp.raise_for_status()
+        data = resp.json()
+        # OSTI may return a bare list or wrap records in a dict
+        if isinstance(data, list):
+            records = data
+        elif isinstance(data, dict):
+            # Try common wrapper keys
+            records = (data.get('records') or data.get('data') or
+                       data.get('list') or data.get('results') or [])
+        else:
             return []
         results = []
         for rec in records:
             doi = (rec.get('doi') or '').strip()
-            osti_id = rec.get('osti_id') or ''
+            osti_id = str(rec.get('osti_id') or '').strip()
             article_url = f'https://doi.org/{doi}' if doi else (
                 f'https://www.osti.gov/biblio/{osti_id}' if osti_id else ''
             )
             if not article_url:
                 continue
             title_raw = (rec.get('title') or '').strip()
-            abstract = re.sub(r'\s+', ' ', (rec.get('description') or '').strip())[:500]
+            # OSTI uses 'description' for abstract in Dublin Core schema
+            abstract = re.sub(r'\s+', ' ',
+                              (rec.get('description') or rec.get('abstract') or '').strip())[:500]
             pub_date = (rec.get('publication_date') or '')[:10]
             pub_str = ''
             if pub_date:
@@ -1341,6 +1353,56 @@ def debug_research_articles(session_id):
         for a in articles
         if a.url and 'news.google.com' in a.url
     ][:10])
+
+
+@bp.route("/api/debug/academic")
+def debug_academic_search():
+    """Probe arXiv and OSTI APIs directly — use ?q=your+topic to test."""
+    query = request.args.get('q', 'nuclear energy')
+    days = request.args.get('days', type=int)
+
+    # Raw OSTI probe (before our parsing layer)
+    osti_raw_info = {}
+    try:
+        r = req_lib.get(
+            'https://www.osti.gov/api/v1/records',
+            params={'q': query, 'rows': 3},
+            headers={'Accept': 'application/json'},
+            timeout=20,
+        )
+        osti_raw_info = {
+            'status': r.status_code,
+            'content_type': r.headers.get('Content-Type', ''),
+            'text_sample': r.text[:600],
+        }
+    except Exception as exc:
+        osti_raw_info = {'error': str(exc)}
+
+    # Raw arXiv probe
+    arxiv_raw_info = {}
+    try:
+        encoded_q = urllib.parse.quote(query)
+        r2 = req_lib.get(
+            f'https://export.arxiv.org/api/query?search_query=all:{encoded_q}&start=0&max_results=3',
+            timeout=20,
+            headers={'User-Agent': 'cits-curator/1.0'},
+        )
+        arxiv_raw_info = {
+            'status': r2.status_code,
+            'content_type': r2.headers.get('Content-Type', ''),
+            'text_sample': r2.text[:600],
+        }
+    except Exception as exc:
+        arxiv_raw_info = {'error': str(exc)}
+
+    arxiv_results = search_arxiv(query, days)
+    osti_results  = search_osti(query, days)
+
+    return jsonify({
+        'query': query,
+        'arxiv': {'parsed_count': len(arxiv_results), 'sample': arxiv_results[:2], 'raw': arxiv_raw_info},
+        'osti':  {'parsed_count': len(osti_results),  'sample': osti_results[:2],  'raw': osti_raw_info},
+    })
 
 
 @bp.route("/api/debug/env")
