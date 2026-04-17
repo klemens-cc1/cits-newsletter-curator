@@ -5,7 +5,7 @@ import re
 import html as html_lib
 import threading
 import urllib.parse
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 
 import feedparser as fp_lib
@@ -20,9 +20,13 @@ bp = Blueprint("main", __name__)
 @dataclass
 class SearchOptions:
     topic: str
-    date_days: int | None = None   # None = all time; else last N days
-    min_score: int = 1             # discard articles scoring below this
-    max_results: int = 50          # cap total articles imported
+    date_days: int | None = None        # None = all time; else last N days
+    min_score: int = 1                  # discard articles scoring below this
+    max_results: int = 50               # cap total articles imported
+    english_only: bool = False          # skip non-English articles
+    must_include: list = field(default_factory=list)   # all terms must appear in title+desc
+    must_exclude: list = field(default_factory=list)   # any match skips the article
+    source_types: list = field(default_factory=list)   # empty = all types
 
 
 def current_week_key():
@@ -741,6 +745,17 @@ def _pub_str(parsed_time) -> str:
         return ""
 
 
+def _is_english(text: str) -> bool:
+    """Return True if text appears to be English. Defaults True when uncertain."""
+    if not text or len(text.split()) < 5:
+        return True   # too short to detect reliably
+    try:
+        from langdetect import detect
+        return detect(text) == 'en'
+    except Exception:
+        return True   # include on error rather than silently drop articles
+
+
 def _domain_from_url(url: str) -> str:
     """Return hostname without leading www."""
     try:
@@ -895,7 +910,8 @@ def search_feeds_by_topic(
 
 def _import_single_article(
     session_id: int, url: str, title: str, topic: str, seen_urls: set,
-    min_score: int = 1, published_at: str = "", source_name: str = ""
+    min_score: int = 1, published_at: str = "", source_name: str = "",
+    must_include: list = None, must_exclude: list = None, english_only: bool = False
 ) -> dict | None:
     """Resolve URL, fetch page, score, and insert one research article."""
     url = resolve_url(url)
@@ -979,6 +995,20 @@ def _import_single_article(
 
         except Exception:
             pass
+
+    # ── Keyword filters ───────────────────────────────────────────────────────
+    # Checked before scoring (cheaper than the Groq API call).
+    haystack = f"{title} {description}".lower()
+    if must_include:
+        if not all(t.lower() in haystack for t in must_include if t):
+            return None
+    if must_exclude:
+        if any(t.lower() in haystack for t in must_exclude if t):
+            return None
+
+    # ── Language filter ────────────────────────────────────────────────────────
+    if english_only and not _is_english(f"{title} {description}"):
+        return None
 
     score = score_article_for_topic(topic, title or url, description)
 
@@ -1068,12 +1098,38 @@ def run_research_search(app, job_id: int, session_id: int, topic: str, opts: Sea
             update_job(6, f"Scoring {len(unique_candidates)} articles…",
                        urls_found=len(unique_candidates))
 
+            # Build feed→type cache once so Phase 6 doesn't hit the DB per article
+            feed_type_cache: dict[str, str] = {}
+            if opts.source_types:
+                for feed in FeedSource.query.filter_by(active=True).all():
+                    tags = [t.strip().lower() for t in (feed.tags or '').split(',')]
+                    if any(t in ('think_tank', 'thinktank') for t in tags):
+                        feed_type_cache[feed.name] = 'think_tank'
+                    elif any(t in ('government', 'govt', 'gov') for t in tags):
+                        feed_type_cache[feed.name] = 'government'
+                    elif 'academic' in tags:
+                        feed_type_cache[feed.name] = 'academic'
+                    else:
+                        feed_type_cache[feed.name] = 'news'
+
             seen_urls: set[str] = set()
             imported = 0
             for i, candidate in enumerate(unique_candidates, 1):
                 if imported >= opts.max_results:
                     break
                 try:
+                    # Source type filter
+                    if opts.source_types:
+                        src = candidate.get('source', '')
+                        if src in ('google_news', 'yahoo_news', 'gdelt'):
+                            stype = 'news'
+                        elif src.startswith('feed:'):
+                            stype = feed_type_cache.get(src[5:], 'news')
+                        else:
+                            stype = 'news'
+                        if stype not in opts.source_types:
+                            continue
+
                     result = _import_single_article(
                         session_id,
                         candidate["url"],
@@ -1083,6 +1139,9 @@ def run_research_search(app, job_id: int, session_id: int, topic: str, opts: Sea
                         opts.min_score,
                         candidate.get("published_at", ""),
                         candidate.get("source_name", ""),
+                        opts.must_include,
+                        opts.must_exclude,
+                        opts.english_only,
                     )
                     if result:
                         imported += 1
@@ -1134,11 +1193,19 @@ def start_research_search(session_id):
     session = ResearchSession.query.get(session_id)
     data = request.get_json() or {}
     date_map = {'7d': 7, '30d': 30, '90d': 90, '180d': 180}
+
+    def _terms(raw: str) -> list[str]:
+        return [t.strip() for t in raw.split(',') if t.strip()]
+
     opts = SearchOptions(
         topic=session.topic,
         date_days=date_map.get(data.get('date_range', ''), None),
         min_score=max(1, min(9, int(data.get('min_score', 1)))),
         max_results=max(10, min(500, int(data.get('max_results', 50)))),
+        english_only=bool(data.get('english_only', False)),
+        must_include=_terms(data.get('must_include', '')),
+        must_exclude=_terms(data.get('must_exclude', '')),
+        source_types=data.get('source_types', []),
     )
     t = threading.Thread(
         target=run_research_search,

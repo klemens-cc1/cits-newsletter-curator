@@ -411,6 +411,42 @@
     .adv-select:focus, .adv-number:focus { border-color: var(--red); }
     .adv-number { width: 80px; }
     .adv-range { accent-color: var(--red); width: 120px; cursor: pointer; }
+    .adv-row + .adv-row { margin-top: 14px; }
+    .adv-text {
+      font-family: 'Oswald', sans-serif;
+      font-size: 12px;
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      background: var(--white);
+      color: var(--charcoal);
+      outline: none;
+      width: 220px;
+    }
+    .adv-text:focus { border-color: var(--red); }
+    .adv-field-wide .adv-text { width: 260px; }
+    .adv-checkboxes { display: flex; gap: 14px; flex-wrap: wrap; padding-top: 2px; }
+    .adv-checkboxes label {
+      font-family: 'Oswald', sans-serif;
+      font-size: 11px;
+      letter-spacing: 0.5px;
+      color: var(--charcoal);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+    }
+    .adv-checkboxes input[type="checkbox"] { accent-color: var(--red); cursor: pointer; }
+    .adv-checkbox-row label {
+      font-family: 'Oswald', sans-serif;
+      font-size: 11px;
+      letter-spacing: 0.5px;
+      color: var(--charcoal);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+    }
+    .adv-checkbox-row input[type="checkbox"] { accent-color: var(--red); cursor: pointer; }
 
     /* ── Article rows ── */
     .article-list { display: flex; flex-direction: column; gap: 0; }
@@ -890,6 +926,32 @@
           <input type="number" class="adv-number" id="adv-max-results" value="50" min="10" max="500">
         </div>
       </div>
+      <div class="adv-row">
+        <div class="adv-field adv-field-wide">
+          <label class="adv-label">Must include <span>(comma-separated)</span></label>
+          <input type="text" class="adv-text" id="adv-must-include" placeholder="e.g. sanctions, export controls">
+        </div>
+        <div class="adv-field adv-field-wide">
+          <label class="adv-label">Must exclude <span>(comma-separated)</span></label>
+          <input type="text" class="adv-text" id="adv-must-exclude" placeholder="e.g. housing, real estate">
+        </div>
+      </div>
+      <div class="adv-row">
+        <div class="adv-field adv-checkbox-row">
+          <label class="adv-label">Filters</label>
+          <label><input type="checkbox" id="adv-english-only"> English articles only</label>
+        </div>
+        <div class="adv-field">
+          <label class="adv-label">Source types</label>
+          <div class="adv-checkboxes">
+            <label><input type="checkbox" class="adv-source-type" value="news" checked> News</label>
+            <label><input type="checkbox" class="adv-source-type" value="think_tank" checked> Think Tank</label>
+            <label><input type="checkbox" class="adv-source-type" value="government" checked> Government</label>
+            <label><input type="checkbox" class="adv-source-type" value="academic" checked> Academic</label>
+          </div>
+        </div>
+      </div>
+    </div>
     </div>
     <div class="search-progress" id="search-progress" style="display:none">
       <div class="search-phases">
@@ -1512,15 +1574,30 @@
       if (el) el.className = 'phase-step';
     }
 
-    const dateRange  = document.getElementById('adv-date-range')?.value  || '';
-    const minScore   = parseInt(document.getElementById('adv-min-score')?.value  || '1');
-    const maxResults = parseInt(document.getElementById('adv-max-results')?.value || '50');
+    const dateRange    = document.getElementById('adv-date-range')?.value || '';
+    const minScore     = parseInt(document.getElementById('adv-min-score')?.value || '1');
+    const maxResults   = parseInt(document.getElementById('adv-max-results')?.value || '50');
+    const englishOnly  = document.getElementById('adv-english-only')?.checked || false;
+    const mustInclude  = document.getElementById('adv-must-include')?.value.trim() || '';
+    const mustExclude  = document.getElementById('adv-must-exclude')?.value.trim() || '';
+    const allTypeBoxes = document.querySelectorAll('.adv-source-type');
+    const checkedTypes = [...document.querySelectorAll('.adv-source-type:checked')].map(el => el.value);
+    // Send empty array when all types checked (backend treats empty = no filter)
+    const sourceTypes  = checkedTypes.length === allTypeBoxes.length ? [] : checkedTypes;
 
     try {
       const res = await fetch(`/api/research/sessions/${currentSessionId}/search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date_range: dateRange, min_score: minScore, max_results: maxResults }),
+        body: JSON.stringify({
+          date_range: dateRange,
+          min_score: minScore,
+          max_results: maxResults,
+          english_only: englishOnly,
+          must_include: mustInclude,
+          must_exclude: mustExclude,
+          source_types: sourceTypes,
+        }),
       });
       const data = await res.json();
       if (data.error) { toast(data.error, true); btn.disabled = false; return; }
