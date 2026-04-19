@@ -589,6 +589,79 @@ def delete_research_article(article_id):
     return jsonify({"deleted": article_id})
 
 
+# ── Research export summaries ────────────────────────────────────────────────
+
+@bp.route("/api/research/sessions/<int:session_id>/export_summaries", methods=["POST"])
+def export_summaries(session_id):
+    """Generate ≤50-word summaries for a batch of articles for export use.
+
+    Uses llama-3.1-8b-instant (fast, lightweight) so these calls don't compete
+    with the main search/score pipeline which uses the 70b model.
+    """
+    ResearchSession.query.get_or_404(session_id)
+    data = request.get_json() or {}
+    article_ids = data.get("article_ids", [])
+
+    if not article_ids:
+        return jsonify({"summaries": {}})
+
+    articles = ResearchArticle.query.filter(
+        ResearchArticle.session_id == session_id,
+        ResearchArticle.id.in_(article_ids),
+    ).all()
+
+    groq_key = os.environ.get("GROQ_API_KEY", "")
+    summaries = {}
+
+    for article in articles:
+        context = (article.description or "").strip()
+        aid = str(article.id)
+
+        if not context:
+            summaries[aid] = ""
+            continue
+
+        # Fallback when Groq is unavailable: truncate description at word boundary
+        if not groq_key:
+            words = context.split()
+            summaries[aid] = " ".join(words[:50]) + ("…" if len(words) > 50 else "")
+            continue
+
+        prompt = (
+            "Summarize the following article excerpt in no more than 50 words. "
+            "State what happened or what was found — be direct and factual. "
+            "Do not start with 'This article' or any preamble. No markdown.\n\n"
+            f"{context[:600]}"
+        )
+        try:
+            resp = req_lib.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {groq_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "llama-3.1-8b-instant",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 80,
+                    "temperature": 0.15,
+                },
+                timeout=10,
+            )
+            resp.raise_for_status()
+            text = resp.json()["choices"][0]["message"]["content"].strip()
+            # Hard-enforce the 50-word cap in case the model runs long
+            words = text.split()
+            if len(words) > 50:
+                text = " ".join(words[:50]) + "…"
+            summaries[aid] = text
+        except Exception:
+            words = context.split()
+            summaries[aid] = " ".join(words[:50]) + ("…" if len(words) > 50 else "")
+
+    return jsonify({"summaries": summaries})
+
+
 # ── Research export ────────────────────────────────────────────────────────────
 
 @bp.route("/api/research/sessions/<int:session_id>/export")

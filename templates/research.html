@@ -900,15 +900,15 @@
     }
     .btn-cancel:hover { color: var(--charcoal); border-color: #999; }
 
-    /* ── Citation options in export modal ── */
-    .modal-cite-toggle-row {
+    /* ── Summaries + citation toggles in export modal ── */
+    .modal-check-row {
       display: flex;
       align-items: center;
-      padding-top: 14px;
+      padding-top: 12px;
       margin-top: 2px;
       border-top: 1px solid var(--border);
     }
-    .modal-cite-toggle-row label {
+    .modal-check-row label {
       font-family: 'Oswald', sans-serif;
       font-size: 11px;
       letter-spacing: 1.5px;
@@ -920,12 +920,15 @@
       gap: 9px;
       user-select: none;
     }
-    .modal-cite-toggle-row input[type="checkbox"] {
+    .modal-check-row input[type="checkbox"] {
       accent-color: var(--red);
       cursor: pointer;
       width: 13px;
       height: 13px;
     }
+
+    /* ── Citation options in export modal ── */
+    /* .modal-cite-toggle-row merged into .modal-check-row above */
     .modal-cite-panel {
       display: none;
       margin-top: 12px;
@@ -1363,7 +1366,13 @@
         <option value="csv">CSV — with relevance scores</option>
       </select>
     </div>
-    <div class="modal-cite-toggle-row">
+    <div class="modal-check-row">
+      <label>
+        <input type="checkbox" id="export-summary-check">
+        Include Summaries <span style="font-size:9px;letter-spacing:0.5px;color:var(--gray);margin-left:4px;">≤ 50 words · AI-generated</span>
+      </label>
+    </div>
+    <div class="modal-check-row">
       <label>
         <input type="checkbox" id="export-cite-check" onchange="toggleCitationOptions()">
         Include Citations
@@ -1905,9 +1914,10 @@
   }
   function closeExportModal() {
     document.getElementById('export-modal').classList.remove('open');
-    // Reset citation checkbox so it doesn't carry over
     const cb = document.getElementById('export-cite-check');
     if (cb) { cb.checked = false; toggleCitationOptions(); }
+    const sb = document.getElementById('export-summary-check');
+    if (sb) sb.checked = false;
   }
 
   function toggleCitationOptions() {
@@ -2134,20 +2144,24 @@
     }
   }
 
-  // Build full export text (shared by copy + download)
-  function buildExportText(articles, fmt, citeStyle, citePlacement) {
+  // Build full export text (shared by copy + download).
+  // `summaries` is an optional {id: "text"} map from the export_summaries endpoint.
+  function buildExportText(articles, fmt, citeStyle, citePlacement, summaries) {
     const topic = document.getElementById('detail-topic').textContent;
     const date  = new Date().toISOString().split('T')[0];
     const cite  = !!citeStyle;
+    const hasSummaries = summaries && Object.keys(summaries).length > 0;
     let text = '';
     const refs = [];
 
     if (fmt === 'csv') {
-      const cols = ['title','url','relevance_score','status','description','curator_note'];
+      const cols = ['title','url','status','description','curator_note'];
+      if (hasSummaries) cols.push('summary');
       if (cite) cols.push('citation');
       const rows = [cols];
       articles.forEach(a => {
-        const row = [a.title||'', a.url, a.relevance_score||'', a.status, a.description||'', a.curator_note||''];
+        const row = [a.title||'', a.url, a.status, a.description||'', a.curator_note||''];
+        if (hasSummaries) row.push(summaries[String(a.id)] || '');
         if (cite) row.push(formatCitation(a, citeStyle, 'text'));
         rows.push(row);
       });
@@ -2155,41 +2169,72 @@
     }
 
     if (fmt === 'bibtex') {
-      // Pure BibTeX output
       return articles.map(a => formatCitation(a, 'bibtex', 'text')).join('\n\n');
     }
 
     if (fmt === 'markdown') {
-      text = `# Research Pack: ${topic}\nGenerated: ${date}\nArticles: ${articles.length}\n\n---\n\n`;
+      text = `# Research Pack: ${topic}\n*${date} · ${articles.length} articles*\n\n---\n\n`;
       articles.forEach((a, i) => {
-        text += `## ${a.title || a.url}\n**Source:** ${a.url}\n`;
-        if (a.relevance_score) text += `**Relevance score:** ${a.relevance_score}/10\n`;
-        if (a.description) text += `**Description:** ${a.description}\n`;
-        if (a.curator_note) text += `**Note:** ${a.curator_note}\n`;
+        // Title is a hyperlink — URL embedded, doesn't appear separately
+        const titleLink = `[${a.title || a.url}](${a.url})`;
+        const src   = sourceOf(a);
+        const dated = fmtDate(a.published_at);
+        const meta  = [src, dated].filter(Boolean).join(' · ');
+        text += `### ${titleLink}\n`;
+        if (meta) text += `*${meta}*\n`;
+        if (hasSummaries && summaries[String(a.id)]) {
+          text += `\n${summaries[String(a.id)]}\n`;
+        }
+        if (a.curator_note) text += `\n> ${a.curator_note}\n`;
         if (cite && citePlacement === 'inline') {
-          text += `\n> *Citation:* ${formatCitation(a, citeStyle, 'markdown')}\n`;
+          text += `\n*${formatCitation(a, citeStyle, 'markdown')}*\n`;
         }
         if (cite && citePlacement === 'endnotes') refs.push(`${i+1}. ${formatCitation(a, citeStyle, 'markdown')}`);
         text += '\n';
       });
       if (refs.length) text += `---\n\n## References\n\n${refs.join('\n')}\n`;
     } else {
-      text = `RESEARCH PACK: ${topic.toUpperCase()}\nGenerated: ${date}\nArticles: ${articles.length}\n\n${'='.repeat(72)}\n\n`;
+      // Plain text — compact: title — URL, source · date, optional summary
+      text = `RESEARCH PACK: ${topic.toUpperCase()}\n${date} · ${articles.length} articles\n\n`;
       articles.forEach((a, i) => {
-        text += `${a.title || a.url}\n${a.url}\n`;
-        if (a.relevance_score) text += `Relevance: ${a.relevance_score}/10\n`;
-        if (a.description) text += `Summary: ${a.description}\n`;
+        const src   = sourceOf(a);
+        const dated = fmtDate(a.published_at);
+        const meta  = [src, dated].filter(Boolean).join(' · ');
+        text += `${a.title || a.url} — ${a.url}\n`;
+        if (meta) text += `${meta}\n`;
+        if (hasSummaries && summaries[String(a.id)]) {
+          text += `${summaries[String(a.id)]}\n`;
+        }
         if (a.curator_note) text += `Note: ${a.curator_note}\n`;
-        if (cite && citePlacement === 'inline') text += `Citation: ${formatCitation(a, citeStyle, 'text')}\n`;
+        if (cite && citePlacement === 'inline') text += `${formatCitation(a, citeStyle, 'text')}\n`;
         if (cite && citePlacement === 'endnotes') refs.push(`[${i+1}] ${formatCitation(a, citeStyle, 'text')}`);
-        text += '\n' + '-'.repeat(48) + '\n\n';
+        text += '\n';
       });
       if (refs.length) {
-        text += `${'='.repeat(72)}\nREFERENCES\n${'='.repeat(72)}\n\n`;
-        text += refs.join('\n\n') + '\n';
+        text += `REFERENCES\n\n${refs.join('\n\n')}\n`;
       }
     }
     return text;
+  }
+
+  // Fetch AI summaries from the backend for the given articles.
+  // Returns a {id: summary} map (empty on error or when not requested).
+  async function fetchExportSummaries(articles) {
+    const checked = document.getElementById('export-summary-check')?.checked;
+    if (!checked || !articles.length) return {};
+    try {
+      const ids = articles.map(a => a.id);
+      const res = await fetch(
+        `/api/research/sessions/${currentSessionId}/export_summaries`,
+        { method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ article_ids: ids }) }
+      );
+      if (!res.ok) return {};
+      const data = await res.json();
+      return data.summaries || {};
+    } catch (_) {
+      return {};
+    }
   }
 
   function getExportArticles() {
@@ -2208,31 +2253,31 @@
     return { style, placement };
   }
 
-  function doExport() {
+  async function doExport() {
     const articles = getExportArticles();
     if (!articles.length) { toast('No articles match the selected filter', true); return; }
 
-    const fmt  = document.getElementById('export-format').value;
+    const fmt = document.getElementById('export-format').value;
     const { style: citeStyle, placement: citePlacement } = getCiteParams();
 
-    // Use client-side generation when citations are on, or for bibtex mode
-    if (citeStyle || fmt === 'csv' || fmt === 'markdown') {
-      const text = buildExportText(articles, fmt, citeStyle, citePlacement);
-      const extMap = { csv: 'csv', markdown: 'md', bibtex: 'bib' };
-      const ext = citeStyle === 'bibtex' ? 'bib' : (extMap[fmt] || 'txt');
-      const topic = document.getElementById('detail-topic').textContent.slice(0, 40).replace(/[^a-z0-9]+/gi, '-');
-      const blob = new Blob([text], { type: 'text/plain' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `research-${topic}-${new Date().toISOString().split('T')[0]}.${ext}`;
-      a.click();
-      URL.revokeObjectURL(a.href);
-      closeExportModal();
-      return;
-    }
-    // Fallback to server route (no citations, plain text)
-    const status = document.getElementById('export-status').value;
-    window.location.href = `/api/research/sessions/${currentSessionId}/export?status=${encodeURIComponent(status)}&format=${fmt}`;
+    // Show loading state while fetching AI summaries (if requested)
+    const btn = document.querySelector('#export-modal .btn-primary');
+    const origLabel = btn?.textContent;
+    if (btn) btn.textContent = 'Generating…';
+
+    const summaries = await fetchExportSummaries(articles);
+    if (btn) btn.textContent = origLabel;
+
+    const text = buildExportText(articles, fmt, citeStyle, citePlacement, summaries);
+    const extMap = { csv: 'csv', markdown: 'md', bibtex: 'bib' };
+    const ext = citeStyle === 'bibtex' ? 'bib' : (extMap[fmt] || 'txt');
+    const topic = document.getElementById('detail-topic').textContent.slice(0, 40).replace(/[^a-z0-9]+/gi, '-');
+    const blob = new Blob([text], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `research-${topic}-${new Date().toISOString().split('T')[0]}.${ext}`;
+    a.click();
+    URL.revokeObjectURL(a.href);
     closeExportModal();
   }
 
@@ -2242,7 +2287,15 @@
 
     const fmt = document.getElementById('export-format').value;
     const { style: citeStyle, placement: citePlacement } = getCiteParams();
-    const text = buildExportText(articles, fmt, citeStyle, citePlacement);
+
+    const btn = document.querySelector('#export-modal .btn-outline');
+    const origLabel = btn?.textContent;
+    if (btn) btn.textContent = 'Generating…';
+
+    const summaries = await fetchExportSummaries(articles);
+    if (btn) btn.textContent = origLabel;
+
+    const text = buildExportText(articles, fmt, citeStyle, citePlacement, summaries);
 
     try {
       await navigator.clipboard.writeText(text);
