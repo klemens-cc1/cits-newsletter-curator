@@ -1102,13 +1102,33 @@
       <div class="adv-row">
         <div class="adv-field">
           <label class="adv-label">Date range</label>
-          <select class="adv-select" id="adv-date-range">
+          <select class="adv-select" id="adv-date-range" onchange="toggleCustomDate(this.value)">
             <option value="">All time</option>
+            <option value="1d">Last 24 hours</option>
+            <option value="3d">Last 3 days</option>
             <option value="7d">Last 7 days</option>
+            <option value="14d">Last 14 days</option>
             <option value="30d">Last 30 days</option>
-            <option value="90d">Last 90 days</option>
+            <option value="60d">Last 60 days</option>
+            <option value="90d">Last 3 months</option>
             <option value="180d">Last 6 months</option>
+            <option value="365d">Last year</option>
+            <option value="2y">Last 2 years</option>
+            <option value="5y">Last 5 years</option>
+            <option value="custom">Custom range…</option>
           </select>
+          <div id="adv-custom-date" style="display:none; margin-top:8px; display:none;">
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+              <div class="adv-field">
+                <label class="adv-label">From</label>
+                <input type="date" class="adv-select" id="adv-date-from" style="cursor:pointer;">
+              </div>
+              <div class="adv-field">
+                <label class="adv-label">To</label>
+                <input type="date" class="adv-select" id="adv-date-to" style="cursor:pointer;">
+              </div>
+            </div>
+          </div>
         </div>
         <div class="adv-field">
           <label class="adv-label">Min score &nbsp;<span id="adv-score-val">1</span></label>
@@ -1819,6 +1839,11 @@
   let searchJobId = null;
   let searchPoller = null;
 
+  function toggleCustomDate(val) {
+    const box = document.getElementById('adv-custom-date');
+    box.style.display = val === 'custom' ? '' : 'none';
+  }
+
   function toggleAdvanced() {
     const opts = document.getElementById('adv-options');
     const btn  = document.getElementById('adv-toggle');
@@ -1839,6 +1864,8 @@
     }
 
     const dateRange    = document.getElementById('adv-date-range')?.value || '';
+    const dateFrom     = dateRange === 'custom' ? (document.getElementById('adv-date-from')?.value || '') : '';
+    const dateTo       = dateRange === 'custom' ? (document.getElementById('adv-date-to')?.value || '')   : '';
     const minScore     = parseInt(document.getElementById('adv-min-score')?.value || '1');
     const maxResults   = parseInt(document.getElementById('adv-max-results')?.value || '50');
     const englishOnly  = document.getElementById('adv-english-only')?.checked || false;
@@ -1855,6 +1882,8 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           date_range: dateRange,
+          date_from: dateFrom,
+          date_to: dateTo,
           min_score: minScore,
           max_results: maxResults,
           english_only: englishOnly,

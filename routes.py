@@ -21,6 +21,8 @@ bp = Blueprint("main", __name__)
 class SearchOptions:
     topic: str
     date_days: int | None = None        # None = all time; else last N days
+    date_from: str = ""                 # ISO "YYYY-MM-DD"; custom range start
+    date_to: str = ""                   # ISO "YYYY-MM-DD"; custom range end
     min_score: int = 1                  # discard articles scoring below this
     max_results: int = 50               # cap total articles imported
     english_only: bool = False          # skip non-English articles
@@ -908,17 +910,24 @@ def search_feeds_by_topic(
     return results
 
 
-def search_semantic_scholar(query: str, date_days: int | None = None) -> list[dict]:
+def search_semantic_scholar(query: str, date_days: int | None = None,
+                            date_from: str = "", date_to: str = "") -> list[dict]:
     """Search Semantic Scholar (220M+ papers) via their Graph API."""
     params: dict = {
         'query': query,
         'fields': 'title,abstract,year,externalIds,openAccessPdf,citationCount,publicationDate',
         'limit': 25,
     }
-    # Year-range filter (S2 only supports year granularity, not exact date)
-    if date_days:
+    # Year-range filter — prefer explicit date_from/date_to, fall back to date_days
+    now_year = datetime.now(timezone.utc).year
+    if date_from or date_to:
+        yr_from = date_from[:4] if date_from else ''
+        yr_to   = date_to[:4]   if date_to   else str(now_year)
+        if yr_from:
+            params['year'] = f"{yr_from}-{yr_to}"
+    elif date_days:
         year_cutoff = (datetime.now(timezone.utc) - timedelta(days=date_days)).year
-        params['year'] = f"{year_cutoff}-{datetime.now(timezone.utc).year}"
+        params['year'] = f"{year_cutoff}-{now_year}"
 
     headers: dict = {}
     api_key = os.environ.get('SEMANTIC_SCHOLAR_API_KEY', '')
@@ -1041,13 +1050,18 @@ def search_arxiv(query: str, date_days: int | None = None) -> list[dict]:
         return []
 
 
-def search_osti(query: str, date_days: int | None = None) -> list[dict]:
+def search_osti(query: str, date_days: int | None = None,
+               date_from: str = "", date_to: str = "") -> list[dict]:
     """Search OSTI.gov (US Dept of Energy) publications via their JSON API."""
     params: dict = {
         'q': query,
         'rows': 25,
     }
-    if date_days:
+    if date_from:
+        params['date_range_start'] = date_from[:10]
+        if date_to:
+            params['date_range_end'] = date_to[:10]
+    elif date_days:
         params['date_range_start'] = (
             datetime.now(timezone.utc) - timedelta(days=date_days)
         ).strftime('%Y-%m-%d')
@@ -1262,10 +1276,20 @@ def run_research_search(app, job_id: int, session_id: int, topic: str, opts: Sea
             queries = generate_query_variations(topic)
             keywords = [w for w in topic.split() if len(w) > 3] or topic.split()
 
+            # Compute effective date_days for functions that only support a lookback window.
+            # When a custom date_from is set, derive days-since as an approximation.
+            eff_days = opts.date_days
+            if not eff_days and opts.date_from:
+                try:
+                    from_dt = datetime.strptime(opts.date_from, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+                    eff_days = max(1, (datetime.now(timezone.utc) - from_dt).days)
+                except Exception:
+                    pass
+
             # Phase 2 — Google News RSS
             update_job(2, f"Searching Google News ({len(queries)} queries)…")
             for q in queries:
-                all_candidates.extend(search_google_news(q, opts.date_days))
+                all_candidates.extend(search_google_news(q, eff_days))
 
             # Phase 3 — Yahoo News RSS
             update_job(3, "Searching Yahoo News…")
@@ -1273,20 +1297,21 @@ def run_research_search(app, job_id: int, session_id: int, topic: str, opts: Sea
 
             # Phase 4 — GDELT
             update_job(4, "Querying GDELT archive…")
-            all_candidates.extend(search_gdelt(topic, opts.date_days))
+            all_candidates.extend(search_gdelt(topic, eff_days))
 
             # Phase 5 — Specialist feeds
             update_job(5, "Scanning specialist RSS feeds…")
-            all_candidates.extend(search_feeds_by_topic(topic, keywords, opts.date_days))
+            all_candidates.extend(search_feeds_by_topic(topic, keywords, eff_days))
 
-            # Phase 6 — Semantic Scholar
+            # Phase 6 — Semantic Scholar (supports full date_from/date_to range)
             update_job(6, "Searching Semantic Scholar…")
             for q in queries[:2]:
-                all_candidates.extend(search_semantic_scholar(q, opts.date_days))
+                all_candidates.extend(search_semantic_scholar(
+                    q, eff_days, opts.date_from, opts.date_to))
 
-            # Phase 7 — OSTI
+            # Phase 7 — OSTI (supports full date_from/date_to range)
             update_job(7, "Searching OSTI.gov (DOE research)…")
-            all_candidates.extend(search_osti(topic, opts.date_days))
+            all_candidates.extend(search_osti(topic, eff_days, opts.date_from, opts.date_to))
 
             # Deduplicate
             seen: set[str] = set()
@@ -1401,14 +1426,22 @@ def start_research_search(session_id):
 
     session = ResearchSession.query.get(session_id)
     data = request.get_json() or {}
-    date_map = {'7d': 7, '30d': 30, '90d': 90, '180d': 180}
+    date_map = {
+        '1d': 1, '3d': 3, '7d': 7, '14d': 14,
+        '30d': 30, '60d': 60, '90d': 90, '180d': 180,
+        '365d': 365, '2y': 730, '5y': 1825,
+    }
+    date_range = data.get('date_range', '')
+    is_custom  = date_range == 'custom'
 
     def _terms(raw: str) -> list[str]:
         return [t.strip() for t in raw.split(',') if t.strip()]
 
     opts = SearchOptions(
         topic=session.topic,
-        date_days=date_map.get(data.get('date_range', ''), None),
+        date_days=date_map.get(date_range) if not is_custom else None,
+        date_from=data.get('date_from', '') if is_custom else '',
+        date_to=data.get('date_to', '')     if is_custom else '',
         min_score=max(1, min(9, int(data.get('min_score', 1)))),
         max_results=max(10, min(500, int(data.get('max_results', 50)))),
         english_only=bool(data.get('english_only', False)),
