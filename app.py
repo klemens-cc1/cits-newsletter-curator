@@ -34,6 +34,8 @@ def _run_migrations(db):
     """Apply additive schema changes that db.create_all() won't handle."""
     migrations = [
         "ALTER TABLE research_articles ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ",
+        "ALTER TABLE research_articles ADD COLUMN IF NOT EXISTS source_name VARCHAR(256)",
+        "ALTER TABLE research_articles ADD COLUMN IF NOT EXISTS source_domain VARCHAR(256)",
     ]
     try:
         with db.engine.connect() as conn:

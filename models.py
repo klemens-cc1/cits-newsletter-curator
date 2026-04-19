@@ -97,6 +97,8 @@ class ResearchArticle(db.Model):
     status          = db.Column(db.String(20), default="unreviewed")
     curator_note    = db.Column(db.Text, nullable=True)
     published_at    = db.Column(db.DateTime, nullable=True)
+    source_name     = db.Column(db.String(256), nullable=True)   # proper org/publication name
+    source_domain   = db.Column(db.String(256), nullable=True)   # raw hostname
     created_at      = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     def to_dict(self):
@@ -110,6 +112,8 @@ class ResearchArticle(db.Model):
             "status":          self.status,
             "curator_note":    self.curator_note,
             "published_at":    self.published_at.isoformat() if self.published_at else None,
+            "source_name":     self.source_name,
+            "source_domain":   self.source_domain,
             "created_at":      self.created_at.isoformat() if self.created_at else None,
         }
 

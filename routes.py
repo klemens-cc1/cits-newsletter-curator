@@ -721,6 +721,65 @@ def resolve_url(url: str) -> str:
     return url
 
 
+def _parse_site_name(raw_html: str) -> str:
+    """Extract og:site_name from page HTML — the proper publication/site name."""
+    for pat in [
+        r'<meta[^>]+property=["\']og:site_name["\'][^>]+content=["\']([^"\']+)["\']',
+        r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:site_name["\']',
+    ]:
+        m = re.search(pat, raw_html, re.IGNORECASE)
+        if m:
+            return html_lib.unescape(m.group(1).strip())
+    return ''
+
+
+def _doi_from_url(url: str) -> str:
+    """Extract a DOI (10.XXXX/...) from a doi.org URL or ?doi= param."""
+    m = re.search(r'(?:doi\.org/|[?&]doi=)(10\.\d{4,}/[^\s?#&"\']+)', url, re.IGNORECASE)
+    return m.group(1) if m else ''
+
+
+def _crossref_meta(doi: str) -> tuple[datetime | None, str]:
+    """Return (publication_date, journal_name) from Crossref for a DOI.
+
+    Uses the polite-pool endpoint (no API key required; just a mailto header).
+    Returns (None, '') on any error.
+    """
+    try:
+        encoded = urllib.parse.quote(doi, safe='/')
+        resp = req_lib.get(
+            f"https://api.crossref.org/works/{encoded}",
+            headers={"User-Agent": "CITS-Research-Curator/1.0 (mailto:research@cits.uga.edu)"},
+            timeout=8,
+        )
+        if resp.status_code != 200:
+            return None, ''
+        msg = resp.json().get('message', {})
+
+        # Journal / container title — prefer short-container-title if present
+        titles = msg.get('container-title') or []
+        short  = msg.get('short-container-title') or []
+        journal = (short[0] if short else '') or (titles[0] if titles else '') or (msg.get('publisher') or '')
+
+        # Publication date — iterate fields in order of specificity
+        pub_dt = None
+        for field in ('published', 'published-print', 'published-online', 'created'):
+            parts = (msg.get(field) or {}).get('date-parts', [[]])[0]
+            if parts and parts[0]:
+                try:
+                    year  = int(parts[0])
+                    month = int(parts[1]) if len(parts) > 1 else 1
+                    day   = int(parts[2]) if len(parts) > 2 else 1
+                    pub_dt = datetime(year, month, day, tzinfo=timezone.utc)
+                    break
+                except (ValueError, TypeError):
+                    continue
+
+        return pub_dt, journal.strip()
+    except Exception:
+        return None, ''
+
+
 def _parse_pub_date(raw_html: str) -> datetime | None:
     """Extract article:published_time or datePublished from page HTML."""
     for pat in [
@@ -903,6 +962,7 @@ def search_feeds_by_topic(
                             "title": title,
                             "source": f"feed:{feed.name}",
                             "published_at": _pub_str(pub_t),
+                            "source_name": feed.name,
                         })
         except Exception:
             continue
@@ -915,7 +975,7 @@ def search_semantic_scholar(query: str, date_days: int | None = None,
     """Search Semantic Scholar (220M+ papers) via their Graph API."""
     params: dict = {
         'query': query,
-        'fields': 'title,abstract,year,externalIds,openAccessPdf,citationCount,publicationDate',
+        'fields': 'title,abstract,year,externalIds,openAccessPdf,citationCount,publicationDate,journal,venue',
         'limit': 25,
     }
     # Year-range filter — prefer explicit date_from/date_to, fall back to date_days
@@ -993,13 +1053,18 @@ def search_semantic_scholar(query: str, date_days: int | None = None,
                 except Exception:
                     pass
 
+            # Use actual journal/venue name when available; fall back to S2 label
+            journal_info = paper.get('journal') or {}
+            venue        = paper.get('venue') or ''
+            journal_name = (journal_info.get('name') or '').strip() or venue.strip() or 'Semantic Scholar'
+
             if title_raw:
                 results.append({
                     'url':          url,
                     'title':        title_raw,
                     'description':  abstract,
                     'source':       'semantic_scholar',
-                    'source_name':  'Semantic Scholar',
+                    'source_name':  journal_name,
                     'published_at': pub_str,
                 })
         return results
@@ -1104,13 +1169,20 @@ def search_osti(query: str, date_days: int | None = None,
                         tzinfo=timezone.utc).isoformat()
                 except Exception:
                     pass
+            # Prefer the actual journal name; fall back to "OSTI.gov" as the repository
+            osti_journal = (
+                (rec.get('journal_name') or '').strip() or
+                (rec.get('publisher') or '').strip() or
+                'OSTI.gov'
+            )
+
             if title_raw:
                 results.append({
                     'url': article_url,
                     'title': title_raw,
                     'description': abstract,
                     'source': 'osti',
-                    'source_name': 'OSTI.gov',
+                    'source_name': osti_journal,
                     'published_at': pub_str,
                 })
         return results
@@ -1122,7 +1194,7 @@ def _import_single_article(
     session_id: int, url: str, title: str, topic: str, seen_urls: set,
     min_score: int = 1, published_at: str = "", source_name: str = "",
     must_include: list = None, must_exclude: list = None, english_only: bool = False,
-    pre_description: str = "",
+    pre_description: str = "", source_domain: str = "",
 ) -> dict | None:
     """Resolve URL, fetch page, score, and insert one research article."""
     url = resolve_url(url)
@@ -1203,8 +1275,23 @@ def _import_single_article(
             if not pub_dt:
                 pub_dt = _parse_pub_date(raw)
 
+            # Site name from og:site_name (only if not already known from feed/API)
+            if not source_name:
+                source_name = _parse_site_name(raw)
+
         except Exception:
             pass
+
+    # Crossref lookup for DOI URLs — authoritative journal name + exact pub date.
+    # Runs for: doi.org links, S2/OSTI articles with generic source names.
+    # Skipped for regular news (no DOI in URL) to avoid adding latency.
+    doi = _doi_from_url(url)
+    if doi and (not pub_dt or source_name in ('', 'Semantic Scholar', 'OSTI.gov', None)):
+        cr_dt, cr_journal = _crossref_meta(doi)
+        if cr_dt and not pub_dt:
+            pub_dt = cr_dt
+        if cr_journal and source_name in ('', 'Semantic Scholar', 'OSTI.gov', None):
+            source_name = cr_journal
 
     # ── Keyword filters ───────────────────────────────────────────────────────
     # Checked before scoring (cheaper than the Groq API call).
@@ -1232,6 +1319,8 @@ def _import_single_article(
         description=description,
         relevance_score=score,
         published_at=pub_dt,
+        source_name=source_name or None,
+        source_domain=source_domain or _domain_from_url(url) or None,
         status="unreviewed",
     )
     db.session.add(article)
@@ -1375,6 +1464,7 @@ def run_research_search(app, job_id: int, session_id: int, topic: str, opts: Sea
                         opts.must_exclude,
                         opts.english_only,
                         candidate.get("description", ""),
+                        candidate.get("source_domain", ""),
                     )
                     if result:
                         imported += 1
