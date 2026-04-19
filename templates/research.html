@@ -852,7 +852,7 @@
       background: var(--white);
       border: 1px solid var(--border);
       padding: 28px 32px;
-      width: 360px;
+      width: 400px;
       max-width: 95vw;
     }
     .modal-title {
@@ -899,6 +899,78 @@
       transition: all 0.15s;
     }
     .btn-cancel:hover { color: var(--charcoal); border-color: #999; }
+
+    /* ── Citation options in export modal ── */
+    .modal-cite-toggle-row {
+      display: flex;
+      align-items: center;
+      padding-top: 14px;
+      margin-top: 2px;
+      border-top: 1px solid var(--border);
+    }
+    .modal-cite-toggle-row label {
+      font-family: 'Oswald', sans-serif;
+      font-size: 11px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--charcoal);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      user-select: none;
+    }
+    .modal-cite-toggle-row input[type="checkbox"] {
+      accent-color: var(--red);
+      cursor: pointer;
+      width: 13px;
+      height: 13px;
+    }
+    .modal-cite-panel {
+      display: none;
+      margin-top: 12px;
+      border-left: 3px solid var(--red);
+      padding: 14px 14px 12px;
+      background: #fafafa;
+      border-right: 1px solid var(--border);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .modal-cite-panel.open {
+      display: block;
+      animation: cite-reveal 0.15s ease;
+    }
+    @keyframes cite-reveal {
+      from { opacity: 0; transform: translateY(-4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .modal-cite-panel .modal-field { margin-bottom: 12px; }
+    .modal-cite-panel .modal-field:last-of-type { margin-bottom: 0; }
+    .modal-cite-disclaimer {
+      margin-top: 12px;
+      padding: 8px 10px;
+      border-left: 3px solid #c9a500;
+      background: #fffbf0;
+      border-right: 1px solid #f0e0a0;
+      border-top: 1px solid #f0e0a0;
+      border-bottom: 1px solid #f0e0a0;
+    }
+    .modal-cite-disclaimer-label {
+      font-family: 'Oswald', sans-serif;
+      font-size: 9px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #9a7200;
+      display: block;
+      margin-bottom: 4px;
+    }
+    .modal-cite-disclaimer p {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 0.2px;
+      color: #7a5e00;
+      line-height: 1.55;
+    }
 
     /* ── Search panel ── */
     .search-box {
@@ -1290,6 +1362,35 @@
         <option value="markdown">Markdown (.md) — research pack</option>
         <option value="csv">CSV — with relevance scores</option>
       </select>
+    </div>
+    <div class="modal-cite-toggle-row">
+      <label>
+        <input type="checkbox" id="export-cite-check" onchange="toggleCitationOptions()">
+        Include Citations
+      </label>
+    </div>
+    <div class="modal-cite-panel" id="export-cite-panel">
+      <div class="modal-field">
+        <label class="modal-label">Citation style</label>
+        <select class="modal-select" id="export-cite-style">
+          <option value="chicago">Chicago (author-date)</option>
+          <option value="mla">MLA 9th</option>
+          <option value="apa">APA 7th</option>
+          <option value="footnote">Plain footnote</option>
+          <option value="bibtex">BibTeX (.bib)</option>
+        </select>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Placement</label>
+        <select class="modal-select" id="export-cite-placement">
+          <option value="inline">Inline — below each article</option>
+          <option value="endnotes">References section at end</option>
+        </select>
+      </div>
+      <div class="modal-cite-disclaimer">
+        <span class="modal-cite-disclaimer-label">Note</span>
+        <p>Citations may not be fully accurate or optimal and should always be manually checked over.</p>
+      </div>
     </div>
     <div class="modal-btns">
       <button class="btn-cancel" onclick="closeExportModal()">Cancel</button>
@@ -1804,54 +1905,152 @@
   }
   function closeExportModal() {
     document.getElementById('export-modal').classList.remove('open');
+    // Reset citation checkbox so it doesn't carry over
+    const cb = document.getElementById('export-cite-check');
+    if (cb) { cb.checked = false; toggleCitationOptions(); }
   }
+
+  function toggleCitationOptions() {
+    const checked = document.getElementById('export-cite-check').checked;
+    document.getElementById('export-cite-panel').classList.toggle('open', checked);
+  }
+
+  // Format a single article as a citation string
+  function formatCitation(a, style) {
+    const title   = a.title || a.url;
+    const src     = sourceOf(a);
+    const dateObj = a.published_at ? new Date(a.published_at) : null;
+    const year    = dateObj ? dateObj.getFullYear() : 'n.d.';
+    const longDate = dateObj
+      ? dateObj.toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' })
+      : 'n.d.';
+    const url = a.url;
+    switch (style) {
+      case 'chicago':
+        return `"${title}." ${src}. ${longDate}. ${url}.`;
+      case 'mla':
+        return `"${title}." ${src}, ${longDate}, ${url}.`;
+      case 'apa':
+        return `${src}. (${year}). ${title}. ${url}`;
+      case 'bibtex': {
+        const key = src.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() + year;
+        return `@article{${key},\n  title   = {${title}},\n  journal = {${src}},\n  year    = {${year}},\n  url     = {${url}}\n}`;
+      }
+      case 'footnote':
+      default:
+        return `${src}, "${title}," ${longDate}, ${url}.`;
+    }
+  }
+
+  // Build full export text (shared by copy + download)
+  function buildExportText(articles, fmt, citeStyle, citePlacement) {
+    const topic = document.getElementById('detail-topic').textContent;
+    const date  = new Date().toISOString().split('T')[0];
+    const cite  = !!citeStyle;
+    let text = '';
+    const refs = [];
+
+    if (fmt === 'csv') {
+      const cols = ['title','url','relevance_score','status','description','curator_note'];
+      if (cite) cols.push('citation');
+      const rows = [cols];
+      articles.forEach(a => {
+        const row = [a.title||'', a.url, a.relevance_score||'', a.status, a.description||'', a.curator_note||''];
+        if (cite) row.push(formatCitation(a, citeStyle));
+        rows.push(row);
+      });
+      return rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+    }
+
+    if (fmt === 'bibtex') {
+      // Pure BibTeX output
+      return articles.map(a => formatCitation(a, 'bibtex')).join('\n\n');
+    }
+
+    if (fmt === 'markdown') {
+      text = `# Research Pack: ${topic}\nGenerated: ${date}\nArticles: ${articles.length}\n\n---\n\n`;
+      articles.forEach((a, i) => {
+        text += `## ${a.title || a.url}\n**Source:** ${a.url}\n`;
+        if (a.relevance_score) text += `**Relevance score:** ${a.relevance_score}/10\n`;
+        if (a.description) text += `**Description:** ${a.description}\n`;
+        if (a.curator_note) text += `**Note:** ${a.curator_note}\n`;
+        if (cite && citePlacement === 'inline') {
+          text += `\n> *Citation:* ${formatCitation(a, citeStyle)}\n`;
+        }
+        if (cite && citePlacement === 'endnotes') refs.push(`${i+1}. ${formatCitation(a, citeStyle)}`);
+        text += '\n';
+      });
+      if (refs.length) text += `---\n\n## References\n\n${refs.join('\n')}\n`;
+    } else {
+      text = `RESEARCH PACK: ${topic.toUpperCase()}\nGenerated: ${date}\nArticles: ${articles.length}\n\n${'='.repeat(72)}\n\n`;
+      articles.forEach((a, i) => {
+        text += `${a.title || a.url}\n${a.url}\n`;
+        if (a.relevance_score) text += `Relevance: ${a.relevance_score}/10\n`;
+        if (a.description) text += `Summary: ${a.description}\n`;
+        if (a.curator_note) text += `Note: ${a.curator_note}\n`;
+        if (cite && citePlacement === 'inline') text += `Citation: ${formatCitation(a, citeStyle)}\n`;
+        if (cite && citePlacement === 'endnotes') refs.push(`[${i+1}] ${formatCitation(a, citeStyle)}`);
+        text += '\n' + '-'.repeat(48) + '\n\n';
+      });
+      if (refs.length) {
+        text += `${'='.repeat(72)}\nREFERENCES\n${'='.repeat(72)}\n\n`;
+        text += refs.join('\n\n') + '\n';
+      }
+    }
+    return text;
+  }
+
+  function getExportArticles() {
+    const statusFilter = document.getElementById('export-status').value;
+    const statuses = statusFilter.split(',').map(s => s.trim());
+    return allArticles
+      .filter(a => statuses.includes(a.status))
+      .sort((a, b) => (b.relevance_score || 0) - (a.relevance_score || 0));
+  }
+
+  function getCiteParams() {
+    const checked = document.getElementById('export-cite-check')?.checked;
+    if (!checked) return { style: null, placement: null };
+    const style     = document.getElementById('export-cite-style')?.value || 'chicago';
+    const placement = document.getElementById('export-cite-placement')?.value || 'endnotes';
+    return { style, placement };
+  }
+
   function doExport() {
+    const articles = getExportArticles();
+    if (!articles.length) { toast('No articles match the selected filter', true); return; }
+
+    const fmt  = document.getElementById('export-format').value;
+    const { style: citeStyle, placement: citePlacement } = getCiteParams();
+
+    // Use client-side generation when citations are on, or for bibtex mode
+    if (citeStyle || fmt === 'csv' || fmt === 'markdown') {
+      const text = buildExportText(articles, fmt, citeStyle, citePlacement);
+      const extMap = { csv: 'csv', markdown: 'md', bibtex: 'bib' };
+      const ext = citeStyle === 'bibtex' ? 'bib' : (extMap[fmt] || 'txt');
+      const topic = document.getElementById('detail-topic').textContent.slice(0, 40).replace(/[^a-z0-9]+/gi, '-');
+      const blob = new Blob([text], { type: 'text/plain' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `research-${topic}-${new Date().toISOString().split('T')[0]}.${ext}`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      closeExportModal();
+      return;
+    }
+    // Fallback to server route (no citations, plain text)
     const status = document.getElementById('export-status').value;
-    const fmt    = document.getElementById('export-format').value;
     window.location.href = `/api/research/sessions/${currentSessionId}/export?status=${encodeURIComponent(status)}&format=${fmt}`;
     closeExportModal();
   }
 
   async function copyToClipboard() {
-    const statusFilter = document.getElementById('export-status').value;
-    const statuses = statusFilter.split(',').map(s => s.trim());
-    const fmt = document.getElementById('export-format').value;
-
-    const articles = allArticles
-      .filter(a => statuses.includes(a.status))
-      .sort((a, b) => (b.relevance_score || 0) - (a.relevance_score || 0));
-
+    const articles = getExportArticles();
     if (!articles.length) { toast('No articles match the selected filter', true); return; }
 
-    const topic = document.getElementById('detail-topic').textContent;
-    const date  = new Date().toISOString().split('T')[0];
-    let text = '';
-
-    if (fmt === 'csv') {
-      const rows = [['title','url','relevance_score','status','description','curator_note']];
-      articles.forEach(a => rows.push([
-        a.title||'', a.url, a.relevance_score||'', a.status, a.description||'', a.curator_note||''
-      ]));
-      text = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
-    } else if (fmt === 'markdown') {
-      text = `# Research Pack: ${topic}\nGenerated: ${date}\nArticles: ${articles.length}\n\n---\n\n`;
-      articles.forEach(a => {
-        text += `## ${a.title || a.url}\n**Source:** ${a.url}\n`;
-        if (a.relevance_score) text += `**Relevance score:** ${a.relevance_score}/10\n`;
-        if (a.description) text += `**Description:** ${a.description}\n`;
-        if (a.curator_note) text += `**Note:** ${a.curator_note}\n`;
-        text += '\n';
-      });
-    } else {
-      text = `RESEARCH PACK: ${topic.toUpperCase()}\nGenerated: ${date}\nArticles: ${articles.length}\n\n${'='.repeat(72)}\n\n`;
-      articles.forEach(a => {
-        text += `${a.title || a.url}\n${a.url}\n`;
-        if (a.relevance_score) text += `Relevance: ${a.relevance_score}/10\n`;
-        if (a.description) text += `Summary: ${a.description}\n`;
-        if (a.curator_note) text += `Note: ${a.curator_note}\n`;
-        text += '\n' + '-'.repeat(48) + '\n\n';
-      });
-    }
+    const fmt = document.getElementById('export-format').value;
+    const { style: citeStyle, placement: citePlacement } = getCiteParams();
+    const text = buildExportText(articles, fmt, citeStyle, citePlacement);
 
     try {
       await navigator.clipboard.writeText(text);
