@@ -607,6 +607,34 @@
       cursor: pointer;
     }
     .adv-checkbox-row input[type="checkbox"] { accent-color: var(--red); cursor: pointer; }
+    .adv-tip {
+      margin-top: 16px;
+      padding: 10px 14px;
+      border-left: 3px solid var(--red);
+      background: #fafafa;
+      border-top: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+    .adv-tip-label {
+      font-family: 'Oswald', sans-serif;
+      font-size: 9px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--red);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .adv-tip-text {
+      font-family: 'Oswald', sans-serif;
+      font-size: 11px;
+      letter-spacing: 0.3px;
+      color: #555;
+      line-height: 1.5;
+    }
 
     /* ── Article rows ── */
     .article-list { display: flex; flex-direction: column; gap: 0; }
@@ -1099,11 +1127,11 @@
     <div class="search-row">
       <span class="search-hint">Queries Google News, Yahoo News, GDELT, and specialist RSS feeds automatically.</span>
       <div style="display:flex;gap:8px;align-items:center">
-        <button class="adv-toggle" id="adv-toggle" onclick="toggleAdvanced()">Options &#9658;</button>
+        <button class="adv-toggle" id="adv-toggle" onclick="toggleAdvanced()">Options &#9660;</button>
         <button class="btn-primary" id="search-btn" onclick="startSearch()">Run Search</button>
       </div>
     </div>
-    <div class="adv-options" id="adv-options" style="display:none">
+    <div class="adv-options" id="adv-options">
       <div class="adv-row">
         <div class="adv-field">
           <label class="adv-label">Date range</label>
@@ -1122,15 +1150,15 @@
             <option value="5y">Last 5 years</option>
             <option value="custom">Custom range…</option>
           </select>
-          <div id="adv-custom-date" style="display:none; margin-top:8px; display:none;">
+          <div id="adv-custom-date" style="display:none; margin-top:8px;">
             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
               <div class="adv-field">
-                <label class="adv-label">From</label>
-                <input type="date" class="adv-select" id="adv-date-from" style="cursor:pointer;">
+                <label class="adv-label">From year</label>
+                <input type="number" class="adv-number" id="adv-date-from" placeholder="YYYY" min="2000" max="2030" style="width:80px;">
               </div>
               <div class="adv-field">
-                <label class="adv-label">To</label>
-                <input type="date" class="adv-select" id="adv-date-to" style="cursor:pointer;">
+                <label class="adv-label">To year</label>
+                <input type="number" class="adv-number" id="adv-date-to" placeholder="YYYY" min="2000" max="2030" style="width:80px;">
               </div>
             </div>
           </div>
@@ -1169,6 +1197,10 @@
             <label><input type="checkbox" class="adv-source-type" value="academic" checked> Academic</label>
           </div>
         </div>
+      </div>
+      <div class="adv-tip">
+        <span class="adv-tip-label">Tip</span>
+        <span class="adv-tip-text">Installing the Google Scholar Chrome extension will allow you to highlight the names of academic articles in order to find other access options and create citations.</span>
       </div>
     </div>
     <div class="search-progress" id="search-progress" style="display:none">
@@ -1871,8 +1903,11 @@
     }
 
     const dateRange    = document.getElementById('adv-date-range')?.value || '';
-    const dateFrom     = dateRange === 'custom' ? (document.getElementById('adv-date-from')?.value || '') : '';
-    const dateTo       = dateRange === 'custom' ? (document.getElementById('adv-date-to')?.value || '')   : '';
+    const rawFrom  = dateRange === 'custom' ? (document.getElementById('adv-date-from')?.value || '') : '';
+    const rawTo    = dateRange === 'custom' ? (document.getElementById('adv-date-to')?.value || '')   : '';
+    // Year-only inputs — expand to full ISO date strings for the backend
+    const dateFrom = rawFrom.length === 4 ? `${rawFrom}-01-01` : rawFrom;
+    const dateTo   = rawTo.length   === 4 ? `${rawTo}-12-31`   : rawTo;
     const minScore     = parseInt(document.getElementById('adv-min-score')?.value || '1');
     const maxResults   = parseInt(document.getElementById('adv-max-results')?.value || '50');
     const englishOnly  = document.getElementById('adv-english-only')?.checked || false;
