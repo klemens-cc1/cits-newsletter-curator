@@ -652,6 +652,19 @@
       flex-shrink: 0;
       white-space: nowrap;
     }
+    .article-date-tag {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 0.5px;
+      color: var(--gray);
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .article-date-tag::before {
+      content: '·';
+      margin-right: 5px;
+      color: var(--border);
+    }
     .article-detail {
       padding: 10px 0 6px 40px;
     }
@@ -1294,6 +1307,15 @@
   //           parse ' - Publisher' from title suffix → fall back to URL hostname.
   // Google News RSS carries source info in <source url="...">Name</source>;
   // we store it as source_name/source_domain and also embed it in the title suffix.
+  function fmtDate(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    // Papers with only a year come in as YYYY-01-01 — show just the year
+    if (iso.endsWith('-01-01T00:00:00+00:00')) return String(d.getUTCFullYear());
+    return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+  }
+
   function sourceOf(article) {
     if (article.source_name) return article.source_name;
     if (article.source_domain) return article.source_domain;
@@ -1555,6 +1577,7 @@
             <a href="${escHtml(a.url)}" target="_blank" rel="noopener"
                onclick="event.stopPropagation()">${escHtml(a.title || a.url)}</a>
             <span class="article-source-tag">${escHtml(sourceOf(a))}</span>
+            ${fmtDate(a.published_at) ? `<span class="article-date-tag">${escHtml(fmtDate(a.published_at))}</span>` : ''}
           </div>
         </div>
         <div class="article-controls">
