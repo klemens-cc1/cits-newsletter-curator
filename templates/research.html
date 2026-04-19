@@ -1915,30 +1915,222 @@
     document.getElementById('export-cite-panel').classList.toggle('open', checked);
   }
 
-  // Format a single article as a citation string
-  function formatCitation(a, style) {
-    const title   = a.title || a.url;
-    const src     = sourceOf(a);
-    const dateObj = a.published_at ? new Date(a.published_at) : null;
-    const year    = dateObj ? dateObj.getFullYear() : 'n.d.';
-    const longDate = dateObj
+  // ── Citation helpers ─────────────────────────────────────────────────────────
+
+  // Lookup table: domain → proper organization name
+  const DOMAIN_NAMES = {
+    // News wires
+    'reuters.com':'Reuters', 'apnews.com':'AP News', 'afp.com':'AFP',
+    // US national press
+    'nytimes.com':'The New York Times', 'washingtonpost.com':'The Washington Post',
+    'wsj.com':'The Wall Street Journal', 'latimes.com':'Los Angeles Times',
+    'usatoday.com':'USA Today', 'theatlantic.com':'The Atlantic',
+    'newyorker.com':'The New Yorker', 'thenation.com':'The Nation',
+    'slate.com':'Slate', 'vox.com':'Vox', 'axios.com':'Axios',
+    'thehill.com':'The Hill', 'politico.com':'Politico',
+    'rollcall.com':'Roll Call', 'cqrollcall.com':'CQ Roll Call',
+    // Broadcast
+    'cnn.com':'CNN', 'foxnews.com':'Fox News', 'nbcnews.com':'NBC News',
+    'cbsnews.com':'CBS News', 'abcnews.go.com':'ABC News', 'npr.org':'NPR',
+    'pbs.org':'PBS', 'bbc.com':'BBC News', 'bbc.co.uk':'BBC News',
+    // Financial / trade
+    'bloomberg.com':'Bloomberg', 'ft.com':'Financial Times',
+    'economist.com':'The Economist', 'marketwatch.com':'MarketWatch',
+    'spglobal.com':'S&P Global', 'platts.com':'S&P Global Platts',
+    'oilprice.com':'OilPrice.com', 'ogj.com':'Oil & Gas Journal',
+    'naturalgasintel.com':'Natural Gas Intelligence',
+    // International press
+    'theguardian.com':'The Guardian', 'independent.co.uk':'The Independent',
+    'telegraph.co.uk':'The Telegraph', 'thetimes.co.uk':'The Times',
+    'thehindu.com':'The Hindu', 'hindustantimes.com':'Hindustan Times',
+    'timesofindia.com':'The Times of India', 'scmp.com':'South China Morning Post',
+    'aljazeera.com':'Al Jazeera', 'arabnews.com':'Arab News',
+    'haaretz.com':'Haaretz', 'jpost.com':'The Jerusalem Post',
+    'kyivpost.com':'Kyiv Post', 'rferl.org':'Radio Free Europe/Radio Liberty',
+    'euractiv.com':'EURACTIV', 'dw.com':'Deutsche Welle',
+    'france24.com':'France 24', 'lemonde.fr':'Le Monde',
+    // Think tanks / policy
+    'brookings.edu':'Brookings Institution',
+    'cfr.org':'Council on Foreign Relations',
+    'csis.org':'Center for Strategic and International Studies',
+    'rand.org':'RAND Corporation',
+    'carnegieendowment.org':'Carnegie Endowment for International Peace',
+    'wilsoncenter.org':'Wilson Center',
+    'atlanticcouncil.org':'Atlantic Council',
+    'heritage.org':'The Heritage Foundation',
+    'aei.org':'American Enterprise Institute',
+    'stimson.org':'Stimson Center',
+    'sipri.org':'SIPRI',
+    'iiss.org':'International Institute for Strategic Studies',
+    'chathamhouse.org':'Chatham House',
+    'piie.com':'Peterson Institute for International Economics',
+    'lse.ac.uk':'London School of Economics',
+    'aspistrategist.org.au':'ASPI Strategist',
+    'warontherocks.com':'War on the Rocks',
+    'lawfareblog.com':'Lawfare', 'lawfaremedia.org':'Lawfare',
+    'defenseone.com':'Defense One',
+    'breakingdefense.com':'Breaking Defense',
+    // Government / intergovernmental
+    'iaea.org':'IAEA', 'iea.org':'IEA', 'energy.gov':'U.S. Department of Energy',
+    'state.gov':'U.S. Department of State', 'whitehouse.gov':'The White House',
+    'congress.gov':'Congress.gov', 'gao.gov':'U.S. GAO',
+    'cbo.gov':'Congressional Budget Office',
+    'eia.gov':'U.S. Energy Information Administration',
+    'epa.gov':'U.S. EPA', 'nrc.gov':'U.S. Nuclear Regulatory Commission',
+    'defense.gov':'U.S. Department of Defense',
+    'commerce.gov':'U.S. Department of Commerce',
+    'treasury.gov':'U.S. Department of the Treasury',
+    'un.org':'United Nations', 'nato.int':'NATO',
+    'europa.eu':'European Union', 'worldbank.org':'World Bank',
+    'imf.org':'International Monetary Fund',
+    'wto.org':'World Trade Organization',
+    'oecd.org':'OECD',
+    // Energy / nuclear specific
+    'nei.org':'Nuclear Energy Institute',
+    'worldnuclear.org':'World Nuclear Association',
+    'power-eng.com':'Power Engineering',
+    'powermag.com':'POWER Magazine',
+    'renenergy.com':'Renewable Energy World',
+    'greentechmedia.com':'Wood Mackenzie (GTM)',
+    'woodmac.com':'Wood Mackenzie',
+    'energymonitor.ai':'Energy Monitor',
+    'energypolicy.columbia.edu':'Columbia Center on Global Energy Policy',
+    'kleinmanenergy.upenn.edu':'Kleinman Center for Energy Policy',
+    'energyinnovation.org':'Energy Innovation',
+    // Academic / preprint
+    'arxiv.org':'arXiv', 'osti.gov':'OSTI',
+    'semanticscholar.org':'Semantic Scholar',
+    'nature.com':'Nature', 'science.org':'Science',
+    'sciencedirect.com':'ScienceDirect', 'springer.com':'Springer',
+    'wiley.com':'Wiley', 'tandfonline.com':'Taylor & Francis',
+    'jstor.org':'JSTOR', 'ssrn.com':'SSRN',
+    'pubmed.ncbi.nlm.nih.gov':'PubMed',
+  };
+
+  // Return a clean organization name for citation use.
+  // Priority: lookup table → cleaned domain → raw source name.
+  function cleanSourceName(rawSrc, url) {
+    // Try domain lookup on actual URL first
+    try {
+      const host = new URL(url).hostname.replace(/^www\./, '');
+      if (DOMAIN_NAMES[host]) return DOMAIN_NAMES[host];
+      // Try stripping a subdomain (e.g. news.bbc.co.uk → bbc.co.uk)
+      const parts = host.split('.');
+      if (parts.length > 2) {
+        const shorter = parts.slice(1).join('.');
+        if (DOMAIN_NAMES[shorter]) return DOMAIN_NAMES[shorter];
+        const shorter2 = parts.slice(-2).join('.');
+        if (DOMAIN_NAMES[shorter2]) return DOMAIN_NAMES[shorter2];
+      }
+    } catch (_) {}
+
+    // If raw source already looks like a proper name (contains spaces / mixed case), use it
+    if (rawSrc && !rawSrc.includes('.') && /[A-Z]/.test(rawSrc)) return rawSrc;
+
+    // Try lookup on rawSrc treated as a domain
+    if (rawSrc && DOMAIN_NAMES[rawSrc]) return DOMAIN_NAMES[rawSrc];
+
+    // Fallback: clean the domain string mechanically
+    let name = rawSrc || '';
+    try { name = new URL(url).hostname.replace(/^www\./, ''); } catch (_) {}
+    name = name
+      .replace(/\.(com|org|gov|edu|net|io|co\.uk|co|uk|int|mil|au|ca|de|fr)$/i, '')
+      .replace(/[-_.]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/\b\w/g, c => c.toUpperCase());   // title-case words
+    return name || rawSrc || url;
+  }
+
+  // Convert title-case string to APA sentence case.
+  // Preserves common acronyms/initialisms and capitalizes after ': '.
+  const _SC_PRESERVE = new Set([
+    'US','UK','EU','UN','USSR','NATO','IAEA','OECD','OPEC','ITER','CERN',
+    'DOE','DOD','EPA','EIA','NRC','CIA','NSA','FBI','FDA','CDC','WHO','IMF','WTO',
+    'LNG','SMR','CCS','CCUS','AI','API','GDP','CO2','CO₂','GHG','EV','RNG',
+    'UAE','KSA','PRC','ROK','DPRK','G7','G20','BRICS',
+    'II','III','IV','VI','VII','VIII','IX','XI','XII',
+  ]);
+  function toSentenceCase(str) {
+    if (!str) return str;
+    // Lowercase everything, then selectively restore
+    let result = str.toLowerCase();
+    // Capitalize first character
+    result = result.charAt(0).toUpperCase() + result.slice(1);
+    // Capitalize first letter after ': ' or '? ' or '! '
+    result = result.replace(/([?!:]\s+)([a-z])/g, (m, p, c) => p + c.toUpperCase());
+    // Restore known acronyms
+    _SC_PRESERVE.forEach(acr => {
+      const re = new RegExp('(?<![\\w-])' + acr.toLowerCase() + '(?![\\w-])', 'g');
+      result = result.replace(re, acr);
+    });
+    return result;
+  }
+
+  // Try to extract a date from a URL path (e.g. /2024/01/15/ or /20240115/)
+  function urlDateFallback(url) {
+    const ymd = url.match(/[/\-_](\d{4})[/\-_](\d{1,2})[/\-_](\d{1,2})[/\-_?#]/);
+    if (ymd) {
+      const d = new Date(+ymd[1], +ymd[2] - 1, +ymd[3]);
+      if (!isNaN(d)) return d;
+    }
+    const ym = url.match(/[/\-_](\d{4})[/\-_](0[1-9]|1[0-2])[/\-_?#]/);
+    if (ym) {
+      const d = new Date(+ym[1], +ym[2] - 1, 1);
+      if (!isNaN(d)) return d;
+    }
+    return null;
+  }
+
+  // Format a single article as a citation string.
+  // `fmt` is 'markdown' or 'text' — italics rendered as *…* only in markdown.
+  function formatCitation(a, style, fmt) {
+    const title    = a.title || a.url;
+    const rawSrc   = sourceOf(a);
+    const src      = cleanSourceName(rawSrc, a.url);
+    const dateObj  = a.published_at
+                       ? new Date(a.published_at)
+                       : urlDateFallback(a.url);
+    const year     = dateObj ? dateObj.getFullYear() : 'n.d.';
+    const fullDate = dateObj
       ? dateObj.toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' })
       : 'n.d.';
+    const apaDate  = dateObj
+      ? `${year}, ${dateObj.toLocaleDateString('en-US', { month:'long', day:'numeric' })}`
+      : 'n.d.';
+    const mlaDate  = dateObj
+      ? dateObj.toLocaleDateString('en-US', { day:'numeric', month:'long', year:'numeric' })
+      : 'n.d.';
     const url = a.url;
+    const md  = fmt === 'markdown';
+    const ital = s => md ? `*${s}*` : s;
+
     switch (style) {
       case 'chicago':
-        return `"${title}." ${src}. ${longDate}. ${url}.`;
+        // Chicago 17 (web): "Title." Organization/Publisher. Month Day, Year. URL.
+        return `"${title}." ${src}. ${fullDate}. ${url}.`;
+
       case 'mla':
-        return `"${title}." ${src}, ${longDate}, ${url}.`;
-      case 'apa':
-        return `${src}. (${year}). ${title}. ${url}`;
+        // MLA 9: "Title of Article." *Website/Publisher*, Day Month Year, URL.
+        return `"${title}." ${ital(src)}, ${mlaDate}, ${url}.`;
+
+      case 'apa': {
+        // APA 7 (§10.16 – Webpage): Author/Org. (Year, Month Day). Title in sentence case. URL
+        // When author = publisher, site name is omitted to avoid duplication.
+        const apaTitle = toSentenceCase(title);
+        return `${src}. (${apaDate}). ${apaTitle}. ${url}`;
+      }
+
       case 'bibtex': {
         const key = src.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() + year;
-        return `@article{${key},\n  title   = {${title}},\n  journal = {${src}},\n  year    = {${year}},\n  url     = {${url}}\n}`;
+        const mo  = dateObj ? dateObj.toLocaleString('en-US', { month:'long' }) : '';
+        return `@article{${key},\n  title   = {${title}},\n  journal = {${src}},\n  year    = {${year}},${mo ? `\n  month   = {${mo}},` : ''}\n  url     = {${url}}\n}`;
       }
+
       case 'footnote':
       default:
-        return `${src}, "${title}," ${longDate}, ${url}.`;
+        // Chicago-style footnote: Publisher, "Title," Month Day, Year, URL.
+        return `${src}, "${title}," ${fullDate}, ${url}.`;
     }
   }
 
@@ -1956,7 +2148,7 @@
       const rows = [cols];
       articles.forEach(a => {
         const row = [a.title||'', a.url, a.relevance_score||'', a.status, a.description||'', a.curator_note||''];
-        if (cite) row.push(formatCitation(a, citeStyle));
+        if (cite) row.push(formatCitation(a, citeStyle, 'text'));
         rows.push(row);
       });
       return rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
@@ -1964,7 +2156,7 @@
 
     if (fmt === 'bibtex') {
       // Pure BibTeX output
-      return articles.map(a => formatCitation(a, 'bibtex')).join('\n\n');
+      return articles.map(a => formatCitation(a, 'bibtex', 'text')).join('\n\n');
     }
 
     if (fmt === 'markdown') {
@@ -1975,9 +2167,9 @@
         if (a.description) text += `**Description:** ${a.description}\n`;
         if (a.curator_note) text += `**Note:** ${a.curator_note}\n`;
         if (cite && citePlacement === 'inline') {
-          text += `\n> *Citation:* ${formatCitation(a, citeStyle)}\n`;
+          text += `\n> *Citation:* ${formatCitation(a, citeStyle, 'markdown')}\n`;
         }
-        if (cite && citePlacement === 'endnotes') refs.push(`${i+1}. ${formatCitation(a, citeStyle)}`);
+        if (cite && citePlacement === 'endnotes') refs.push(`${i+1}. ${formatCitation(a, citeStyle, 'markdown')}`);
         text += '\n';
       });
       if (refs.length) text += `---\n\n## References\n\n${refs.join('\n')}\n`;
@@ -1988,8 +2180,8 @@
         if (a.relevance_score) text += `Relevance: ${a.relevance_score}/10\n`;
         if (a.description) text += `Summary: ${a.description}\n`;
         if (a.curator_note) text += `Note: ${a.curator_note}\n`;
-        if (cite && citePlacement === 'inline') text += `Citation: ${formatCitation(a, citeStyle)}\n`;
-        if (cite && citePlacement === 'endnotes') refs.push(`[${i+1}] ${formatCitation(a, citeStyle)}`);
+        if (cite && citePlacement === 'inline') text += `Citation: ${formatCitation(a, citeStyle, 'text')}\n`;
+        if (cite && citePlacement === 'endnotes') refs.push(`[${i+1}] ${formatCitation(a, citeStyle, 'text')}`);
         text += '\n' + '-'.repeat(48) + '\n\n';
       });
       if (refs.length) {
