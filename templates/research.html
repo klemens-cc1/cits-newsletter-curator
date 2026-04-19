@@ -975,6 +975,67 @@
       line-height: 1.55;
     }
 
+    /* ── RTF format info tooltip ── */
+    .modal-fmt-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .modal-fmt-row .modal-select { flex: 1; }
+    .rtf-info-btn {
+      flex-shrink: 0;
+      width: 20px;
+      height: 20px;
+      border: 1px solid var(--border);
+      background: none;
+      font-family: 'Oswald', sans-serif;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--gray);
+      cursor: help;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    .rtf-info-btn.visible { display: flex; }
+    .rtf-info-btn:hover { border-color: var(--red); color: var(--red); }
+    .rtf-info-tooltip {
+      display: none;
+      position: absolute;
+      bottom: calc(100% + 8px);
+      right: 0;
+      width: 260px;
+      background: var(--charcoal);
+      border-left: 3px solid var(--red);
+      padding: 12px 14px;
+      z-index: 400;
+      pointer-events: none;
+    }
+    .rtf-info-btn:hover .rtf-info-tooltip { display: block; }
+    .rtf-info-tooltip strong {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--red);
+      display: block;
+      margin-bottom: 8px;
+    }
+    .rtf-info-tooltip p {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 0.3px;
+      color: #ccc;
+      line-height: 1.7;
+      margin-bottom: 6px;
+    }
+    .rtf-info-tooltip p:last-child { margin-bottom: 0; }
+    .rtf-info-tooltip em {
+      color: #999;
+      font-style: normal;
+    }
+
     /* ── Search panel ── */
     .search-box {
       background: var(--white);
@@ -1360,12 +1421,26 @@
     </div>
     <div class="modal-field">
       <label class="modal-label">Format</label>
-      <select class="modal-select" id="export-format">
-        <option value="rtf">Word / Docs (.rtf) — hyperlinked titles</option>
-        <option value="text">Plain text (.txt)</option>
-        <option value="markdown">Markdown (.md) — hyperlinked titles</option>
-        <option value="csv">CSV — spreadsheet</option>
-      </select>
+      <div class="modal-fmt-row">
+        <select class="modal-select" id="export-format" onchange="onFormatChange()">
+          <option value="rtf">Word / Docs (.rtf) — hyperlinked titles</option>
+          <option value="text">Plain text (.txt)</option>
+          <option value="markdown">Markdown (.md) — hyperlinked titles</option>
+          <option value="csv">CSV — spreadsheet</option>
+        </select>
+        <button class="rtf-info-btn visible" id="rtf-info-btn" type="button" tabindex="-1" aria-label="How to open RTF in Word or Google Docs">?
+          <div class="rtf-info-tooltip">
+            <strong>Opening in Word or Docs</strong>
+            <p><em>Microsoft Word</em><br>
+            File &rsaquo; Open, select the .rtf file.<br>
+            Or drag the file directly into Word.</p>
+            <p><em>Google Docs</em><br>
+            Open Google Drive &rsaquo; New &rsaquo; File upload.<br>
+            After upload, right-click &rsaquo; Open with &rsaquo; Google Docs.</p>
+            <p><em>Both apps</em> render the article titles as blue clickable hyperlinks &mdash; no separate URLs needed.</p>
+          </div>
+        </button>
+      </div>
     </div>
     <div class="modal-check-row">
       <label>
@@ -1484,16 +1559,27 @@
     return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
   }
 
+  // Aggregator/redirect domains whose source_domain should not surface as the publisher name
+  const _AGGREGATOR_DOMAINS = new Set([
+    'news.google.com', 'news.yahoo.com', 'news.bing.com', 'smartnews.com',
+    'flipboard.com', 'feedly.com', 'inoreader.com',
+  ]);
+
   function sourceOf(article) {
+    // source_name is the proper publisher name (e.g. "Mother Jones"), always prefer it
     if (article.source_name) return article.source_name;
-    if (article.source_domain) return article.source_domain;
-    const url = article.url || '';
-    const title = article.title || '';
-    if (url.includes('news.google.com')) {
-      const m = title.match(/\s+-\s+([^-]{2,60})$/);
+    // Skip aggregator/redirect domains — they're not the real publisher
+    const urlStr = article.url || '';
+    const domain = domainOf(urlStr);
+    if (article.source_domain && !_AGGREGATOR_DOMAINS.has(article.source_domain)) {
+      return article.source_domain;
+    }
+    // For Google News: extract publisher from title suffix " - Publisher Name"
+    if (urlStr.includes('news.google.com')) {
+      const m = (article.title || '').match(/\s+-\s+([^-]{2,60})$/);
       if (m) return m[1].trim();
     }
-    return domainOf(url);
+    return domain;
   }
 
   // ── History drawer / panel toggles ──────────────────────────────────────────
@@ -1921,6 +2007,12 @@
     if (sb) sb.checked = false;
   }
 
+  function onFormatChange() {
+    const fmt = document.getElementById('export-format')?.value;
+    const btn = document.getElementById('rtf-info-btn');
+    if (btn) btn.classList.toggle('visible', fmt === 'rtf');
+  }
+
   function toggleCitationOptions() {
     const checked = document.getElementById('export-cite-check').checked;
     document.getElementById('export-cite-panel').classList.toggle('open', checked);
@@ -2112,36 +2204,40 @@
     const mlaDate  = dateObj
       ? dateObj.toLocaleDateString('en-US', { day:'numeric', month:'long', year:'numeric' })
       : 'n.d.';
-    const url = a.url;
+    // Google News RSS URLs (news.google.com/rss/articles/...) can't be resolved
+    // server-side. Convert to the web UI form which at least opens in a browser.
+    // Flag with [via Google News] so the researcher knows to verify.
+    let url = a.url;
+    let urlNote = '';
+    if (url.includes('news.google.com/rss/articles/')) {
+      url = url.replace('/rss/articles/', '/articles/');
+      urlNote = ' [via Google News — verify original URL]';
+    }
     const md  = fmt === 'markdown';
     const ital = s => md ? `*${s}*` : s;
 
     switch (style) {
       case 'chicago':
-        // Chicago 17 (web): "Title." Organization/Publisher. Month Day, Year. URL.
-        return `"${title}." ${src}. ${fullDate}. ${url}.`;
+        return `"${title}." ${src}. ${fullDate}. ${url}${urlNote}.`;
 
       case 'mla':
-        // MLA 9: "Title of Article." *Website/Publisher*, Day Month Year, URL.
-        return `"${title}." ${ital(src)}, ${mlaDate}, ${url}.`;
+        return `"${title}." ${ital(src)}, ${mlaDate}, ${url}${urlNote}.`;
 
       case 'apa': {
-        // APA 7 (§10.16 – Webpage): Author/Org. (Year, Month Day). Title in sentence case. URL
-        // When author = publisher, site name is omitted to avoid duplication.
         const apaTitle = toSentenceCase(title);
-        return `${src}. (${apaDate}). ${apaTitle}. ${url}`;
+        return `${src}. (${apaDate}). ${apaTitle}. ${url}${urlNote}`;
       }
 
       case 'bibtex': {
         const key = src.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() + year;
         const mo  = dateObj ? dateObj.toLocaleString('en-US', { month:'long' }) : '';
-        return `@article{${key},\n  title   = {${title}},\n  journal = {${src}},\n  year    = {${year}},${mo ? `\n  month   = {${mo}},` : ''}\n  url     = {${url}}\n}`;
+        const noteField = urlNote ? `\n  note    = {${urlNote.trim()}},` : '';
+        return `@article{${key},\n  title   = {${title}},\n  journal = {${src}},\n  year    = {${year}},${mo ? `\n  month   = {${mo}},` : ''}${noteField}\n  url     = {${url}}\n}`;
       }
 
       case 'footnote':
       default:
-        // Chicago-style footnote: Publisher, "Title," Month Day, Year, URL.
-        return `${src}, "${title}," ${fullDate}, ${url}.`;
+        return `${src}, "${title}," ${fullDate}, ${url}${urlNote}.`;
     }
   }
 
@@ -2228,16 +2324,26 @@
     const hasSummaries = summaries && Object.keys(summaries).length > 0;
     const refs = [];
 
-    // Escape special RTF chars; encode non-ASCII as \'XX hex
+    // Escape RTF special chars; normalise typographic punctuation to ASCII;
+    // encode remaining non-ASCII using RTF Unicode escape \uN? (N = decimal code point).
+    // RTF \'XX is a 1-byte Windows-1252 value — using it for Unicode code points > 255
+    // produces wrong characters (e.g. U+2019 → \'19 which is a control char, not an apostrophe).
     function rtfEsc(str) {
       if (!str) return '';
+      // Normalise common typographic chars to plain ASCII so they survive in any RTF reader
+      str = String(str)
+        .replace(/[\u2018\u2019\u201A\u201B]/g, "'")   // curly single quotes
+        .replace(/[\u201C\u201D\u201E\u201F]/g, '"')   // curly double quotes
+        .replace(/\u2013/g, '-').replace(/\u2014/g, '--')  // en/em dash
+        .replace(/\u2026/g, '...')                     // ellipsis
+        .replace(/\u00A0/g, ' ');                      // non-breaking space
       let out = '';
-      for (const ch of String(str)) {
+      for (const ch of str) {
         const code = ch.charCodeAt(0);
         if      (ch === '\\') out += '\\\\';
         else if (ch === '{' ) out += '\\{';
         else if (ch === '}' ) out += '\\}';
-        else if (code > 127 ) out += `\\'${code.toString(16).padStart(2,'0')}`;
+        else if (code > 127 ) out += `\\u${code}?`;   // RTF Unicode escape — Word 2000+
         else                  out += ch;
       }
       return out;
