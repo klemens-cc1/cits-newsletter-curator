@@ -12,7 +12,7 @@ import feedparser as fp_lib
 import requests as req_lib
 from flask import Blueprint, jsonify, render_template, request, Response
 from app import db
-from models import Article, RefreshLog, ResearchSession, ResearchArticle, FeedSource, ResearchJob
+from models import Article, RefreshLog, ResearchSession, ResearchArticle, FeedSource, ResearchJob, Feedback
 
 bp = Blueprint("main", __name__)
 
@@ -39,6 +39,11 @@ def current_week_key():
 # ── Main UI ───────────────────────────────────────────────────────────────────
 
 @bp.route("/")
+def home():
+    return render_template("home.html")
+
+
+@bp.route("/newsletter")
 def index():
     weeks = (
         db.session.query(Article.week_key)
@@ -54,6 +59,73 @@ def index():
 @bp.route("/history")
 def history():
     return render_template("history.html")
+
+
+# ── Stats / Feedback / Admin ──────────────────────────────────────────────────
+
+@bp.route("/api/stats")
+def api_stats():
+    total_newsletter = Article.query.count()
+    total_sessions   = ResearchSession.query.count()
+    total_selected   = ResearchArticle.query.filter_by(status="selected").count()
+    last_log         = RefreshLog.query.order_by(RefreshLog.pushed_at.desc()).first()
+    last_refresh     = last_log.pushed_at.isoformat() if last_log and last_log.pushed_at else None
+    return jsonify({
+        "total_newsletter_articles": total_newsletter,
+        "total_research_sessions":   total_sessions,
+        "total_research_selected":   total_selected,
+        "last_refresh":              last_refresh,
+    })
+
+
+@bp.route("/api/feedback", methods=["POST"])
+def api_feedback():
+    data       = request.get_json(silent=True) or {}
+    message    = (data.get("message") or "").strip()
+    passphrase = (data.get("passphrase") or "").strip()
+
+    expected = os.environ.get("FEEDBACK_PASSPHRASE", "")
+    if not expected or passphrase != expected:
+        return jsonify({"error": "Incorrect passphrase."}), 403
+    if not message:
+        return jsonify({"error": "Message is required."}), 400
+
+    fb = Feedback(message=message)
+    db.session.add(fb)
+    db.session.commit()
+    return jsonify({"ok": True}), 200
+
+
+@bp.route("/admin/feedback")
+def admin_feedback():
+    auth = request.authorization
+    expected_pw = os.environ.get("FEEDBACK_PASSPHRASE", "")
+    if not auth or auth.username != "admin" or auth.password != expected_pw:
+        return Response(
+            "Authentication required.",
+            401,
+            {"WWW-Authenticate": 'Basic realm="CITS Admin"'},
+        )
+    entries = Feedback.query.order_by(Feedback.submitted_at.desc()).all()
+    rows = "".join(
+        f'<tr><td style="color:#909090;white-space:nowrap;padding:10px 16px 10px 0;font-size:12px;font-family:\'Oswald\',sans-serif;vertical-align:top">{e.submitted_at.strftime("%Y-%m-%d %H:%M") if e.submitted_at else ""}</td>'
+        f'<td style="padding:10px 0;font-size:14px;font-family:\'Merriweather\',serif;line-height:1.6">{html_lib.escape(e.message)}</td></tr>'
+        for e in entries
+    )
+    return f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500&family=Merriweather:wght@300;400&display=swap" rel="stylesheet">
+<title>Feedback — CITS Admin</title>
+<style>
+  body{{font-family:'Merriweather',serif;background:#efefef;color:#252525;padding:40px 48px;}}
+  h1{{font-family:'Oswald',sans-serif;font-size:22px;letter-spacing:3px;text-transform:uppercase;margin-bottom:6px;}}
+  .underline{{width:40px;height:3px;background:#ba0c2f;margin-bottom:32px;}}
+  table{{border-collapse:collapse;width:100%;max-width:860px;}}
+  tr{{border-bottom:1px solid #e0e0e0;}}
+</style></head><body>
+<h1>Feedback</h1><div class="underline"></div>
+<p style="font-size:13px;color:#909090;margin-bottom:24px;font-family:'Oswald',sans-serif;letter-spacing:1px">{len(entries)} SUBMISSION{"S" if len(entries) != 1 else ""}</p>
+<table>{rows if rows else '<tr><td style="padding:20px 0;color:#909090">No feedback yet.</td></tr>'}</table>
+</body></html>"""
 
 
 # ── Articles API ──────────────────────────────────────────────────────────────

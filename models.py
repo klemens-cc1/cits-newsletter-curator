@@ -159,3 +159,11 @@ class ResearchJob(db.Model):
             "created_at":   self.created_at.isoformat() if self.created_at else None,
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
         }
+
+
+class Feedback(db.Model):
+    __tablename__ = "feedback"
+
+    id           = db.Column(db.Integer, primary_key=True)
+    message      = db.Column(db.Text, nullable=False)
+    submitted_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))

@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CITS Research Platform</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;500&family=Merriweather:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --red:      #ba0c2f;
+      --charcoal: #252525;
+      --mid:      #3a3a3a;
+      --gray:     #909090;
+      --light:    #efefef;
+      --white:    #ffffff;
+      --border:   #e0e0e0;
+    }
+
+    body {
+      font-family: 'Merriweather', Georgia, serif;
+      background: var(--light);
+      color: var(--charcoal);
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--charcoal);
+      padding: 0 32px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      height: 60px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+      border-top: 3px solid var(--red);
+    }
+    .header-wordmark { line-height: 1; }
+    .header-title {
+      font-family: 'Oswald', sans-serif;
+      font-size: 18px;
+      font-weight: 500;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: var(--red);
+      line-height: 1;
+    }
+    .header-institution {
+      font-family: 'Oswald', sans-serif;
+      font-size: 8px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: #555;
+      margin-top: 3px;
+      white-space: nowrap;
+    }
+    .header-divider { width: 1px; height: 24px; background: #3a3a3a; flex-shrink: 0; }
+    .header-spacer { flex: 1; }
+    .nav-link {
+      font-family: 'Oswald', sans-serif;
+      font-size: 11px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: #666;
+      text-decoration: none;
+      padding: 5px 11px;
+      border: 1px solid #383838;
+      transition: all 0.15s;
+    }
+    .nav-link:hover { color: #ccc; border-color: #555; }
+    .nav-link.active { color: var(--white); border-color: var(--red); background: rgba(186,12,47,0.18); }
+
+    /* ── Page ── */
+    .page {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 64px 32px 80px;
+    }
+
+    /* ── Hero ── */
+    .hero {
+      margin-bottom: 56px;
+      opacity: 0;
+      transform: translateY(12px);
+      animation: fadeUp 0.45s ease forwards;
+    }
+    .hero-eyebrow {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--red);
+      margin-bottom: 12px;
+    }
+    .hero-title {
+      font-family: 'Oswald', sans-serif;
+      font-size: 52px;
+      font-weight: 500;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--charcoal);
+      line-height: 1.05;
+      margin-bottom: 16px;
+    }
+    .hero-subtitle {
+      font-family: 'Merriweather', serif;
+      font-size: 14px;
+      font-weight: 300;
+      color: var(--gray);
+      line-height: 1.6;
+      max-width: 540px;
+    }
+    .hero-rule {
+      width: 48px;
+      height: 3px;
+      background: var(--red);
+      margin-top: 20px;
+    }
+
+    /* ── Nav Cards ── */
+    .cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-bottom: 56px;
+    }
+    .card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--red);
+      padding: 28px 28px 24px;
+      text-decoration: none;
+      color: inherit;
+      display: block;
+      transition: border-color 0.15s, background 0.15s;
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    .card:nth-child(1) { animation: fadeUp 0.45s ease 0.12s forwards; }
+    .card:nth-child(2) { animation: fadeUp 0.45s ease 0.22s forwards; }
+    .card:hover { border-color: var(--red); background: #fafafa; }
+    .card-title {
+      font-family: 'Oswald', sans-serif;
+      font-size: 17px;
+      font-weight: 500;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--charcoal);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+    }
+    .card-arrow {
+      font-size: 18px;
+      color: var(--red);
+      transition: transform 0.15s;
+      display: inline-block;
+    }
+    .card:hover .card-arrow { transform: translateX(5px); }
+    .card-desc {
+      font-family: 'Merriweather', serif;
+      font-size: 13px;
+      font-weight: 300;
+      color: var(--gray);
+      line-height: 1.65;
+    }
+
+    /* ── Stats Strip ── */
+    .stats-strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0;
+      margin-bottom: 64px;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 28px 0;
+      opacity: 0;
+      animation: fadeUp 0.45s ease 0.32s forwards;
+    }
+    .stat-item {
+      text-align: center;
+      padding: 0 16px;
+      border-right: 1px solid var(--border);
+    }
+    .stat-item:last-child { border-right: none; }
+    .stat-number {
+      font-family: 'Oswald', sans-serif;
+      font-size: 36px;
+      font-weight: 400;
+      color: var(--charcoal);
+      line-height: 1;
+      margin-bottom: 6px;
+    }
+    .stat-number.loading { color: var(--border); font-size: 28px; }
+    .stat-label {
+      font-family: 'Oswald', sans-serif;
+      font-size: 9px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--gray);
+    }
+
+    /* ── Feedback Section ── */
+    .feedback-section {
+      max-width: 580px;
+      opacity: 0;
+      animation: fadeUp 0.45s ease 0.42s forwards;
+    }
+    .section-heading {
+      font-family: 'Oswald', sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--charcoal);
+      margin-bottom: 6px;
+    }
+    .section-rule {
+      width: 36px;
+      height: 2px;
+      background: var(--red);
+      margin-bottom: 24px;
+    }
+    .form-group {
+      margin-bottom: 16px;
+    }
+    .form-label {
+      display: block;
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--gray);
+      margin-bottom: 6px;
+    }
+    .form-input,
+    .form-textarea {
+      width: 100%;
+      font-family: 'Oswald', sans-serif;
+      font-size: 13px;
+      color: var(--charcoal);
+      background: var(--white);
+      border: 1px solid var(--border);
+      padding: 9px 12px;
+      outline: none;
+      resize: vertical;
+      transition: border-color 0.15s;
+    }
+    .form-input:focus,
+    .form-textarea:focus { border-color: var(--charcoal); }
+    .form-textarea { min-height: 100px; }
+    .form-btn {
+      font-family: 'Oswald', sans-serif;
+      font-size: 11px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--white);
+      background: var(--charcoal);
+      border: 1px solid var(--charcoal);
+      padding: 9px 22px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .form-btn:hover { background: var(--red); border-color: var(--red); }
+    .form-btn:disabled { opacity: 0.5; cursor: wait; }
+    .form-msg {
+      margin-top: 12px;
+      font-family: 'Oswald', sans-serif;
+      font-size: 12px;
+      letter-spacing: 1px;
+      display: none;
+    }
+    .form-msg.success { color: #2a7a2a; display: block; }
+    .form-msg.error   { color: var(--red); display: block; }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 20px 32px;
+      text-align: center;
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #bbb;
+    }
+
+    @keyframes fadeUp {
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-wordmark">
+    <div class="header-title">CITS</div>
+    <div class="header-institution">Center for International Trade and Security</div>
+  </div>
+  <div class="header-divider"></div>
+  <div class="header-spacer"></div>
+  <a href="/" class="nav-link active">Home</a>
+  <a href="/newsletter" class="nav-link">Newsletter</a>
+  <a href="/research" class="nav-link">Research</a>
+  <a href="/history" class="nav-link">History</a>
+</header>
+
+<div class="page">
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="hero-eyebrow">University of Georgia</div>
+    <h1 class="hero-title">CITS Research<br>Platform</h1>
+    <p class="hero-subtitle">A curation and research tool for the Center for International Trade and Security</p>
+    <div class="hero-rule"></div>
+  </div>
+
+  <!-- Nav Cards -->
+  <div class="cards">
+    <a href="/newsletter" class="card">
+      <div class="card-title">
+        Newsletter Curator
+        <span class="card-arrow">→</span>
+      </div>
+      <p class="card-desc">Review and curate weekly energy and security articles for the CITS newsletter</p>
+    </a>
+    <a href="/research" class="card">
+      <div class="card-title">
+        Research Mode
+        <span class="card-arrow">→</span>
+      </div>
+      <p class="card-desc">Run automated searches, triage academic and news sources, and export research packs</p>
+    </a>
+  </div>
+
+  <!-- Stats Strip -->
+  <div class="stats-strip" id="statsStrip">
+    <div class="stat-item">
+      <div class="stat-number loading" id="stat-newsletter">—</div>
+      <div class="stat-label">Newsletter Articles</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-number loading" id="stat-sessions">—</div>
+      <div class="stat-label">Research Sessions</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-number loading" id="stat-selected">—</div>
+      <div class="stat-label">Research Sources Selected</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-number loading" id="stat-refresh" style="font-size:18px">—</div>
+      <div class="stat-label">Last Feed Refresh</div>
+    </div>
+  </div>
+
+  <!-- Feedback -->
+  <div class="feedback-section">
+    <div class="section-heading">Feedback</div>
+    <div class="section-rule"></div>
+    <form id="feedbackForm" onsubmit="submitFeedback(event)">
+      <div class="form-group">
+        <label class="form-label" for="fbMessage">Message</label>
+        <textarea class="form-textarea" id="fbMessage" name="message" required placeholder="Share a bug report, feature request, or general feedback…"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="fbPassphrase">Access Passphrase</label>
+        <input class="form-input" type="password" id="fbPassphrase" name="passphrase" required autocomplete="off">
+      </div>
+      <button class="form-btn" type="submit" id="fbSubmit">Submit</button>
+      <div class="form-msg" id="fbMsg"></div>
+    </form>
+  </div>
+
+</div>
+
+<footer>
+  CITS Newsletter Curator &mdash; Center for International Trade and Security
+</footer>
+
+<script>
+  // Load stats
+  fetch('/api/stats')
+    .then(r => r.json())
+    .then(d => {
+      document.getElementById('stat-newsletter').textContent = d.total_newsletter_articles ?? '—';
+      document.getElementById('stat-sessions').textContent   = d.total_research_sessions ?? '—';
+      document.getElementById('stat-selected').textContent   = d.total_research_selected ?? '—';
+
+      const el = document.getElementById('stat-refresh');
+      el.classList.remove('loading');
+      if (d.last_refresh) {
+        const dt = new Date(d.last_refresh);
+        el.style.fontSize = '16px';
+        el.textContent = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      } else {
+        el.textContent = 'Never';
+      }
+
+      ['stat-newsletter','stat-sessions','stat-selected'].forEach(id => {
+        document.getElementById(id).classList.remove('loading');
+      });
+    })
+    .catch(() => {});
+
+  // Submit feedback
+  function submitFeedback(e) {
+    e.preventDefault();
+    const btn    = document.getElementById('fbSubmit');
+    const msgEl  = document.getElementById('fbMsg');
+    const message    = document.getElementById('fbMessage').value.trim();
+    const passphrase = document.getElementById('fbPassphrase').value;
+
+    btn.disabled = true;
+    msgEl.className = 'form-msg';
+    msgEl.textContent = '';
+
+    fetch('/api/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, passphrase }),
+    })
+    .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
+    .then(({ ok, data }) => {
+      if (ok) {
+        msgEl.className = 'form-msg success';
+        msgEl.textContent = 'Feedback submitted. Thank you.';
+        document.getElementById('feedbackForm').reset();
+      } else {
+        msgEl.className = 'form-msg error';
+        msgEl.textContent = data.error || 'Submission failed.';
+      }
+    })
+    .catch(() => {
+      msgEl.className = 'form-msg error';
+      msgEl.textContent = 'Network error. Please try again.';
+    })
+    .finally(() => { btn.disabled = false; });
+  }
+</script>
+</body>
+</html>
