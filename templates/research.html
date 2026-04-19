@@ -1361,9 +1361,10 @@
     <div class="modal-field">
       <label class="modal-label">Format</label>
       <select class="modal-select" id="export-format">
-        <option value="text">Plain text (.txt) — paste into Word / Docs</option>
-        <option value="markdown">Markdown (.md) — research pack</option>
-        <option value="csv">CSV — with relevance scores</option>
+        <option value="rtf">Word / Docs (.rtf) — hyperlinked titles</option>
+        <option value="text">Plain text (.txt)</option>
+        <option value="markdown">Markdown (.md) — hyperlinked titles</option>
+        <option value="csv">CSV — spreadsheet</option>
       </select>
     </div>
     <div class="modal-check-row">
@@ -2217,6 +2218,95 @@
     return text;
   }
 
+  // Build an RTF document with properly hyperlinked article titles.
+  // RTF is opened natively by Word (.rtf) and importable by Google Docs.
+  // Hyperlink syntax: {\field{\*\fldinst{HYPERLINK "URL"}}{\fldrslt text}}
+  function buildRtfExport(articles, citeStyle, citePlacement, summaries) {
+    const topic = document.getElementById('detail-topic').textContent;
+    const date  = new Date().toISOString().split('T')[0];
+    const cite  = !!citeStyle;
+    const hasSummaries = summaries && Object.keys(summaries).length > 0;
+    const refs = [];
+
+    // Escape special RTF chars; encode non-ASCII as \'XX hex
+    function rtfEsc(str) {
+      if (!str) return '';
+      let out = '';
+      for (const ch of String(str)) {
+        const code = ch.charCodeAt(0);
+        if      (ch === '\\') out += '\\\\';
+        else if (ch === '{' ) out += '\\{';
+        else if (ch === '}' ) out += '\\}';
+        else if (code > 127 ) out += `\\'${code.toString(16).padStart(2,'0')}`;
+        else                  out += ch;
+      }
+      return out;
+    }
+
+    // Blue underlined clickable hyperlink
+    function rtfLink(title, url) {
+      return (
+        `{\\field{\\*\\fldinst{HYPERLINK "${rtfEsc(url)}"}}` +
+        `{\\fldrslt {\\cs1\\ul\\cf1 ${rtfEsc(title)}}}}`
+      );
+    }
+
+    let body = '';
+
+    // Document header
+    body += `{\\b\\fs28 ${rtfEsc(topic)}}\\par\n`;
+    body += `{\\fs18\\cf2 ${rtfEsc(date)} \\bullet  ${articles.length} articles}\\par\\par\n`;
+
+    articles.forEach((a, i) => {
+      const title = a.title || a.url;
+      const src   = sourceOf(a);
+      const dated = fmtDate(a.published_at);
+      const meta  = [src, dated].filter(Boolean).join(' \u00b7 ');
+
+      // Hyperlinked title
+      body += `{\\fs22 ${rtfLink(title, a.url)}}\\par\n`;
+
+      // Source · date in gray
+      if (meta) body += `{\\fs18\\cf2 ${rtfEsc(meta)}}\\par\n`;
+
+      // AI summary
+      if (hasSummaries && summaries[String(a.id)]) {
+        body += `{\\fs19 ${rtfEsc(summaries[String(a.id)])}}\\par\n`;
+      }
+
+      // Curator note
+      if (a.curator_note) {
+        body += `{\\fs18\\i Note: ${rtfEsc(a.curator_note)}}\\par\n`;
+      }
+
+      // Inline citation
+      if (cite && citePlacement === 'inline') {
+        body += `{\\fs17\\cf2 ${rtfEsc(formatCitation(a, citeStyle, 'text'))}}\\par\n`;
+      }
+      if (cite && citePlacement === 'endnotes') {
+        refs.push(`[${i+1}] ${formatCitation(a, citeStyle, 'text')}`);
+      }
+
+      body += '\\par\n';
+    });
+
+    // References block
+    if (refs.length) {
+      body += `\\par{\\b\\fs22 References}\\par\n`;
+      refs.forEach(r => { body += `{\\fs18 ${rtfEsc(r)}}\\par\n`; });
+    }
+
+    return (
+      '{\\rtf1\\ansi\\ansicpg1252\\deff0\n' +
+      '{\\fonttbl{\\f0\\froman\\fcharset0 Georgia;}{\\f1\\fswiss\\fcharset0 Arial;}}\n' +
+      // cf1 = link blue, cf2 = gray meta
+      '{\\colortbl ;\\red17\\green85\\blue204;\\red120\\green120\\blue120;}\n' +
+      '\\f1\\fs20\\widowctrl\n' +
+      body +
+      '}'
+    );
+  }
+
   // Fetch AI summaries from the backend for the given articles.
   // Returns a {id: summary} map (empty on error or when not requested).
   async function fetchExportSummaries(articles) {
@@ -2268,14 +2358,25 @@
     const summaries = await fetchExportSummaries(articles);
     if (btn) btn.textContent = origLabel;
 
-    const text = buildExportText(articles, fmt, citeStyle, citePlacement, summaries);
-    const extMap = { csv: 'csv', markdown: 'md', bibtex: 'bib' };
-    const ext = citeStyle === 'bibtex' ? 'bib' : (extMap[fmt] || 'txt');
     const topic = document.getElementById('detail-topic').textContent.slice(0, 40).replace(/[^a-z0-9]+/gi, '-');
-    const blob = new Blob([text], { type: 'text/plain' });
+    const today = new Date().toISOString().split('T')[0];
+
+    let content, ext, mime;
+    if (fmt === 'rtf') {
+      content = buildRtfExport(articles, citeStyle, citePlacement, summaries);
+      ext  = 'rtf';
+      mime = 'application/rtf';
+    } else {
+      content = buildExportText(articles, fmt, citeStyle, citePlacement, summaries);
+      const extMap = { csv: 'csv', markdown: 'md', bibtex: 'bib' };
+      ext  = citeStyle === 'bibtex' ? 'bib' : (extMap[fmt] || 'txt');
+      mime = 'text/plain';
+    }
+
+    const blob = new Blob([content], { type: mime });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `research-${topic}-${new Date().toISOString().split('T')[0]}.${ext}`;
+    a.download = `research-${topic}-${today}.${ext}`;
     a.click();
     URL.revokeObjectURL(a.href);
     closeExportModal();
@@ -2295,11 +2396,14 @@
     const summaries = await fetchExportSummaries(articles);
     if (btn) btn.textContent = origLabel;
 
-    const text = buildExportText(articles, fmt, citeStyle, citePlacement, summaries);
+    // RTF isn't usable as raw clipboard text — fall back to plain text for copy
+    const copyFmt = fmt === 'rtf' ? 'text' : fmt;
+    const text = buildExportText(articles, copyFmt, citeStyle, citePlacement, summaries);
 
     try {
       await navigator.clipboard.writeText(text);
-      toast(`Copied ${articles.length} articles to clipboard`);
+      const note = fmt === 'rtf' ? ' (plain text — use Download for Word/Docs)' : '';
+      toast(`Copied ${articles.length} articles to clipboard${note}`);
       closeExportModal();
     } catch (_) {
       toast('Clipboard unavailable — use Download instead', true);
