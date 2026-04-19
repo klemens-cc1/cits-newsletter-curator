@@ -632,8 +632,6 @@
     .article-title-line {
       display: flex;
       align-items: baseline;
-      gap: 10px;
-      flex-wrap: wrap;
     }
     .article-title-line a {
       font-family: 'Merriweather', serif;
@@ -644,12 +642,17 @@
       line-height: 1.4;
     }
     .article-title-line a:hover { color: var(--red); }
+    .article-meta-line {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin-top: 3px;
+    }
     .article-source-tag {
       font-family: 'Oswald', sans-serif;
       font-size: 10px;
       letter-spacing: 0.5px;
       color: var(--gray);
-      flex-shrink: 0;
       white-space: nowrap;
     }
     .article-date-tag {
@@ -657,12 +660,11 @@
       font-size: 10px;
       letter-spacing: 0.5px;
       color: var(--gray);
-      flex-shrink: 0;
       white-space: nowrap;
     }
     .article-date-tag::before {
       content: '·';
-      margin-right: 5px;
+      margin: 0 5px;
       color: var(--border);
     }
     .article-detail {
@@ -1596,6 +1598,8 @@
           <div class="article-title-line">
             <a href="${escHtml(a.url)}" target="_blank" rel="noopener"
                onclick="event.stopPropagation()">${escHtml(a.title || a.url)}</a>
+          </div>
+          <div class="article-meta-line">
             <span class="article-source-tag">${escHtml(sourceOf(a))}</span>
             ${fmtDate(a.published_at) ? `<span class="article-date-tag">${escHtml(fmtDate(a.published_at))}</span>` : ''}
           </div>
