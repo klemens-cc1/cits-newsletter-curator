@@ -908,6 +908,96 @@ def search_feeds_by_topic(
     return results
 
 
+def search_semantic_scholar(query: str, date_days: int | None = None) -> list[dict]:
+    """Search Semantic Scholar (220M+ papers) via their Graph API."""
+    params: dict = {
+        'query': query,
+        'fields': 'title,abstract,year,externalIds,openAccessPdf,citationCount,publicationDate',
+        'limit': 25,
+    }
+    # Year-range filter (S2 only supports year granularity, not exact date)
+    if date_days:
+        year_cutoff = (datetime.now(timezone.utc) - timedelta(days=date_days)).year
+        params['year'] = f"{year_cutoff}-{datetime.now(timezone.utc).year}"
+
+    headers: dict = {}
+    api_key = os.environ.get('SEMANTIC_SCHOLAR_API_KEY', '')
+    if api_key:
+        headers['x-api-key'] = api_key
+
+    try:
+        resp = req_lib.get(
+            'https://api.semanticscholar.org/graph/v1/paper/search',
+            params=params,
+            headers=headers,
+            timeout=20,
+        )
+        resp.raise_for_status()
+        papers = resp.json().get('data', [])
+        results = []
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=date_days)) if date_days else None
+
+        for paper in papers:
+            ext_ids    = paper.get('externalIds') or {}
+            oa_pdf     = (paper.get('openAccessPdf') or {}).get('url', '')
+            doi        = ext_ids.get('DOI', '')
+            arxiv_id   = ext_ids.get('ArXiv', '')
+            paper_id   = paper.get('paperId', '')
+
+            # URL priority: open-access PDF > DOI > arXiv abs page > S2 page
+            if oa_pdf:
+                url = oa_pdf
+            elif doi:
+                url = f'https://doi.org/{doi}'
+            elif arxiv_id:
+                url = f'https://arxiv.org/abs/{arxiv_id}'
+            elif paper_id:
+                url = f'https://www.semanticscholar.org/paper/{paper_id}'
+            else:
+                continue
+
+            title_raw = (paper.get('title') or '').strip()
+            abstract  = re.sub(r'\s+', ' ', (paper.get('abstract') or '').strip())[:480]
+
+            # Append citation count if meaningful — useful signal for policy researchers
+            cite_n = paper.get('citationCount') or 0
+            if cite_n >= 5:
+                abstract = f"{abstract} [{cite_n} citations]".strip()
+
+            pub_date = paper.get('publicationDate') or ''
+            year     = paper.get('year')
+            pub_str  = ''
+            if pub_date:
+                try:
+                    pub_str = datetime.strptime(pub_date[:10], '%Y-%m-%d').replace(
+                        tzinfo=timezone.utc).isoformat()
+                except Exception:
+                    pass
+            elif year:
+                pub_str = f'{year}-01-01T00:00:00+00:00'
+
+            # Sub-year precision cutoff check
+            if cutoff and pub_str:
+                try:
+                    if datetime.fromisoformat(pub_str) < cutoff:
+                        continue
+                except Exception:
+                    pass
+
+            if title_raw:
+                results.append({
+                    'url':          url,
+                    'title':        title_raw,
+                    'description':  abstract,
+                    'source':       'semantic_scholar',
+                    'source_name':  'Semantic Scholar',
+                    'published_at': pub_str,
+                })
+        return results
+    except Exception:
+        return []
+
+
 def search_arxiv(query: str, date_days: int | None = None) -> list[dict]:
     """Search arXiv preprint server via its Atom API."""
     # Only encode the query text — keep 'all:' literal so arXiv parses it correctly
@@ -1189,10 +1279,10 @@ def run_research_search(app, job_id: int, session_id: int, topic: str, opts: Sea
             update_job(5, "Scanning specialist RSS feeds…")
             all_candidates.extend(search_feeds_by_topic(topic, keywords, opts.date_days))
 
-            # Phase 6 — arXiv
-            update_job(6, "Searching arXiv preprints…")
-            for q in queries[:2]:   # limit to 2 queries to stay within rate limit
-                all_candidates.extend(search_arxiv(q, opts.date_days))
+            # Phase 6 — Semantic Scholar
+            update_job(6, "Searching Semantic Scholar…")
+            for q in queries[:2]:
+                all_candidates.extend(search_semantic_scholar(q, opts.date_days))
 
             # Phase 7 — OSTI
             update_job(7, "Searching OSTI.gov (DOE research)…")
@@ -1238,7 +1328,7 @@ def run_research_search(app, job_id: int, session_id: int, topic: str, opts: Sea
                         src = candidate.get('source', '')
                         if src in ('google_news', 'yahoo_news', 'gdelt'):
                             stype = 'news'
-                        elif src in ('arxiv', 'osti'):
+                        elif src in ('arxiv', 'osti', 'semantic_scholar'):
                             stype = 'academic'
                         elif src.startswith('feed:'):
                             stype = feed_type_cache.get(src[5:], 'news')
@@ -1378,30 +1468,29 @@ def debug_academic_search():
     except Exception as exc:
         osti_raw_info = {'error': str(exc)}
 
-    # Raw arXiv probe
-    arxiv_raw_info = {}
+    # Raw Semantic Scholar probe
+    s2_raw_info = {}
     try:
-        encoded_q = urllib.parse.quote(query)
         r2 = req_lib.get(
-            f'https://export.arxiv.org/api/query?search_query=all:{encoded_q}&start=0&max_results=3',
+            'https://api.semanticscholar.org/graph/v1/paper/search',
+            params={'query': query, 'fields': 'title,abstract,citationCount', 'limit': 3},
             timeout=20,
-            headers={'User-Agent': 'cits-curator/1.0'},
         )
-        arxiv_raw_info = {
+        s2_raw_info = {
             'status': r2.status_code,
             'content_type': r2.headers.get('Content-Type', ''),
             'text_sample': r2.text[:600],
         }
     except Exception as exc:
-        arxiv_raw_info = {'error': str(exc)}
+        s2_raw_info = {'error': str(exc)}
 
-    arxiv_results = search_arxiv(query, days)
-    osti_results  = search_osti(query, days)
+    s2_results   = search_semantic_scholar(query, days)
+    osti_results = search_osti(query, days)
 
     return jsonify({
-        'query': query,
-        'arxiv': {'parsed_count': len(arxiv_results), 'sample': arxiv_results[:2], 'raw': arxiv_raw_info},
-        'osti':  {'parsed_count': len(osti_results),  'sample': osti_results[:2],  'raw': osti_raw_info},
+        'query':            query,
+        'semantic_scholar': {'parsed_count': len(s2_results),   'sample': s2_results[:2],   'raw': s2_raw_info},
+        'osti':             {'parsed_count': len(osti_results),  'sample': osti_results[:2],  'raw': osti_raw_info},
     })
 
 
