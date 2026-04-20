@@ -80,13 +80,9 @@ def api_home_stats():
 
 @bp.route("/api/feedback", methods=["POST"])
 def api_feedback():
-    data       = request.get_json(silent=True) or {}
-    message    = (data.get("message") or "").strip()
-    passphrase = (data.get("passphrase") or "").strip()
+    data    = request.get_json(silent=True) or {}
+    message = (data.get("message") or "").strip()
 
-    expected = os.environ.get("FEEDBACK_PASSPHRASE", "")
-    if not expected or passphrase != expected:
-        return jsonify({"error": "Incorrect passphrase."}), 403
     if not message:
         return jsonify({"error": "Message is required."}), 400
 

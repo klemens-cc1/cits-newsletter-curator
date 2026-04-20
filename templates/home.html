@@ -368,10 +368,6 @@
         <label class="form-label" for="fbMessage">Message</label>
         <textarea class="form-textarea" id="fbMessage" name="message" required placeholder="Share a bug report, feature request, or general feedback…"></textarea>
       </div>
-      <div class="form-group">
-        <label class="form-label" for="fbPassphrase">Access Passphrase</label>
-        <input class="form-input" type="password" id="fbPassphrase" name="passphrase" required autocomplete="off">
-      </div>
       <button class="form-btn" type="submit" id="fbSubmit">Submit</button>
       <div class="form-msg" id="fbMsg"></div>
     </form>
@@ -413,8 +409,7 @@
     e.preventDefault();
     const btn    = document.getElementById('fbSubmit');
     const msgEl  = document.getElementById('fbMsg');
-    const message    = document.getElementById('fbMessage').value.trim();
-    const passphrase = document.getElementById('fbPassphrase').value;
+    const message = document.getElementById('fbMessage').value.trim();
 
     btn.disabled = true;
     msgEl.className = 'form-msg';
@@ -423,7 +418,7 @@
     fetch('/api/feedback', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, passphrase }),
+      body: JSON.stringify({ message }),
     })
     .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
     .then(({ ok, data }) => {
