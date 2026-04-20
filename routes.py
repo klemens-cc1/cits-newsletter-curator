@@ -94,7 +94,7 @@ def api_feedback():
 
 @bp.route("/admin/feedback")
 def admin_feedback():
-    expected_pw = os.environ.get("FEEDBACK_PASSPHRASE", "")
+    expected_pw = os.environ.get("ADMIN_PASSWORD", "")
     pw = request.args.get("pw", "")
     if not expected_pw or pw != expected_pw:
         return Response("Unauthorized.", 403)
