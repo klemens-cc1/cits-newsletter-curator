@@ -385,7 +385,7 @@
 
 <script>
   // Load stats
-  fetch('/api/stats')
+  fetch('/api/home-stats')
     .then(r => r.json())
     .then(d => {
       document.getElementById('stat-newsletter').textContent = d.total_newsletter_articles ?? '—';

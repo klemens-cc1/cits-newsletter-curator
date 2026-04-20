@@ -63,8 +63,8 @@ def history():
 
 # ── Stats / Feedback / Admin ──────────────────────────────────────────────────
 
-@bp.route("/api/stats")
-def api_stats():
+@bp.route("/api/home-stats")
+def api_home_stats():
     total_newsletter = Article.query.count()
     total_sessions   = ResearchSession.query.count()
     total_selected   = ResearchArticle.query.filter_by(status="selected").count()

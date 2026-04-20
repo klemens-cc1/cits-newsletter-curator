@@ -1036,6 +1036,59 @@
       font-style: normal;
     }
 
+    /* ── Format help tooltip ("what's right for me?") ── */
+    .fmt-help-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 14px;
+      height: 14px;
+      border: 1px solid var(--border);
+      font-family: 'Oswald', sans-serif;
+      font-size: 9px;
+      font-weight: 500;
+      color: var(--gray);
+      cursor: help;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .fmt-help-btn:hover { border-color: var(--red); color: var(--red); }
+    .fmt-help-tooltip {
+      display: none;
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 0;
+      width: 280px;
+      background: var(--charcoal);
+      border-left: 3px solid var(--red);
+      padding: 12px 14px;
+      z-index: 400;
+      pointer-events: none;
+    }
+    .fmt-help-btn:hover .fmt-help-tooltip { display: block; }
+    .fmt-help-tooltip strong {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--red);
+      display: block;
+      margin-bottom: 8px;
+    }
+    .fmt-help-tooltip p {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 0.3px;
+      color: #ccc;
+      line-height: 1.7;
+      margin-bottom: 6px;
+    }
+    .fmt-help-tooltip p:last-child { margin-bottom: 0; }
+    .fmt-help-tooltip em {
+      color: #fff;
+      font-style: normal;
+    }
+
     /* ── Search panel ── */
     .search-box {
       background: var(--white);
@@ -1421,7 +1474,17 @@
       </select>
     </div>
     <div class="modal-field">
-      <label class="modal-label">Format</label>
+      <label class="modal-label" style="display:flex;align-items:center;gap:7px;">Format
+        <span class="fmt-help-btn" tabindex="-1" aria-label="What file type is right for me?">?
+          <span class="fmt-help-tooltip">
+            <strong>What file type is right for me?</strong>
+            <p><em>Word / Docs (.rtf)</em> — Best for sharing or editing. Titles are clickable hyperlinks. Open in Microsoft Word or upload to Google Drive &rsaquo; Open with Docs.</p>
+            <p><em>Plain text (.txt)</em> — Paste anywhere. No formatting, no hyperlinks. Best for notes or simple reference.</p>
+            <p><em>Markdown (.md)</em> — Best for GitHub, Obsidian, or any Markdown editor. Titles are hyperlinked.</p>
+            <p><em>CSV</em> — Best for Excel or Google Sheets. One row per article with all metadata columns.</p>
+          </span>
+        </span>
+      </label>
       <div class="modal-fmt-row">
         <select class="modal-select" id="export-format" onchange="onFormatChange()">
           <option value="rtf">Word / Docs (.rtf) — hyperlinked titles</option>

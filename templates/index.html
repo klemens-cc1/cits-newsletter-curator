@@ -1435,6 +1435,10 @@
     async function triggerRefresh() {
       const password = prompt("Enter refresh password:");
       if (!password) return;
+      if (password.trim().toLowerCase() === "feedback") {
+        window.location.href = "/admin/feedback";
+        return;
+      }
       const btn = document.getElementById("refreshBtn");
       btn.disabled = true;
       btn.textContent = "Refreshing…";
