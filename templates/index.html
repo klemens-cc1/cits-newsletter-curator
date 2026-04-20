@@ -1436,7 +1436,9 @@
       const password = prompt("Enter refresh password:");
       if (!password) return;
       if (password.trim().toLowerCase() === "feedback") {
-        window.location.href = "/admin/feedback";
+        const adminPw = prompt("Admin password:");
+        if (!adminPw) return;
+        window.location.href = "/admin/feedback?pw=" + encodeURIComponent(adminPw);
         return;
       }
       const btn = document.getElementById("refreshBtn");

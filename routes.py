@@ -94,14 +94,10 @@ def api_feedback():
 
 @bp.route("/admin/feedback")
 def admin_feedback():
-    auth = request.authorization
     expected_pw = os.environ.get("FEEDBACK_PASSPHRASE", "")
-    if not auth or auth.username != "admin" or auth.password != expected_pw:
-        return Response(
-            "Authentication required.",
-            401,
-            {"WWW-Authenticate": 'Basic realm="CITS Admin"'},
-        )
+    pw = request.args.get("pw", "")
+    if not expected_pw or pw != expected_pw:
+        return Response("Unauthorized.", 403)
     entries = Feedback.query.order_by(Feedback.submitted_at.desc()).all()
     rows = "".join(
         f'<tr><td style="color:#909090;white-space:nowrap;padding:10px 16px 10px 0;font-size:12px;font-family:\'Oswald\',sans-serif;vertical-align:top">{e.submitted_at.strftime("%Y-%m-%d %H:%M") if e.submitted_at else ""}</td>'
