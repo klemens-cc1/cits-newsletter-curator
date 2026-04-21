@@ -1152,7 +1152,6 @@
             </div>
             ${summary}
             ${note}
-            ${!a.ai_summary ? `<button class="summarize-btn" onclick="summarizeArticle(${a.id}, this)">↓ Pull description</button>` : ""}
           </div>
           <div class="status-buttons">
             <button class="status-btn ${a.status === 'selected' ? 'active-selected' : ''}" onclick="setStatus(${a.id}, 'selected')">✓ Select</button>
