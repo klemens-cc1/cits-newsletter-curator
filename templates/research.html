@@ -1630,16 +1630,17 @@
     // source_name is the proper publisher name (e.g. "Mother Jones"), always prefer it
     // but skip it if it's a Google/aggregator domain stored by mistake
     if (article.source_name && !article.source_name.toLowerCase().includes('google')) return article.source_name;
-    // Skip aggregator/redirect domains — they're not the real publisher
     const urlStr = article.url || '';
     const domain = domainOf(urlStr);
-    if (article.source_domain && !_AGGREGATOR_DOMAINS.has(article.source_domain)) {
-      return article.source_domain;
-    }
-    // For Google News: extract publisher from title suffix " - Publisher Name"
+    // For Google News: title suffix " - Publisher Name" is the most specific source —
+    // check it before source_domain (which is only the homepage, not the full org name)
     if (urlStr.includes('news.google.com')) {
       const m = (article.title || '').match(/\s+-\s+([^-]{2,60})$/);
       if (m) return m[1].trim();
+      if (article.source_domain && article.source_domain !== 'news.google.com') return article.source_domain;
+    }
+    if (article.source_domain && !_AGGREGATOR_DOMAINS.has(article.source_domain)) {
+      return article.source_domain;
     }
     return domain;
   }
@@ -2196,8 +2197,13 @@
     if (rawSrc && DOMAIN_NAMES[rawSrc]) return DOMAIN_NAMES[rawSrc];
 
     // Fallback: clean the domain string mechanically
+    // Don't overwrite rawSrc with the URL hostname when the URL is an aggregator (e.g. news.google.com)
+    // because that would produce "News Google" instead of the real publisher name
     let name = rawSrc || '';
-    try { name = new URL(url).hostname.replace(/^www\./, ''); } catch (_) {}
+    const _isAggUrl = url && (url.includes('news.google.com') || url.includes('news.yahoo.com'));
+    if (!_isAggUrl) {
+      try { name = new URL(url).hostname.replace(/^www\./, ''); } catch (_) {}
+    }
     name = name
       .replace(/\.(com|org|gov|edu|net|io|co\.uk|co|uk|int|mil|au|ca|de|fr)$/i, '')
       .replace(/[-_.]/g, ' ')
