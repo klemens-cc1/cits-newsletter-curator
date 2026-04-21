@@ -2265,14 +2265,15 @@
     const mlaDate  = dateObj
       ? dateObj.toLocaleDateString('en-US', { day:'numeric', month:'long', year:'numeric' })
       : 'n.d.';
-    // Google News RSS URLs (news.google.com/rss/articles/...) can't be resolved
-    // server-side. Convert to the web UI form which at least opens in a browser.
-    // Flag with [via Google News] so the researcher knows to verify.
+    // Google News blob URLs can't be resolved to the real article URL.
+    // Use the stored source_domain as a stand-in so citations are readable.
     let url = a.url;
     let urlNote = '';
-    if (url.includes('news.google.com/rss/articles/')) {
-      url = url.replace('/rss/articles/', '/articles/');
-      urlNote = ' [via Google News — verify original URL]';
+    const isGNews = url.includes('news.google.com');
+    if (isGNews) {
+      const domain = a.source_domain || src.toLowerCase().replace(/[^a-z0-9.]/g, '') + '.com';
+      url = `https://${domain}`;
+      urlNote = ' [URL via Google News — verify on source site]';
     }
     const md  = fmt === 'markdown';
     const ital = s => md ? `*${s}*` : s;
