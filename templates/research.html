@@ -1628,7 +1628,8 @@
 
   function sourceOf(article) {
     // source_name is the proper publisher name (e.g. "Mother Jones"), always prefer it
-    if (article.source_name) return article.source_name;
+    // but skip it if it's a Google/aggregator domain stored by mistake
+    if (article.source_name && !article.source_name.toLowerCase().includes('google')) return article.source_name;
     // Skip aggregator/redirect domains — they're not the real publisher
     const urlStr = article.url || '';
     const domain = domainOf(urlStr);
@@ -2334,8 +2335,10 @@
     if (fmt === 'markdown') {
       text = `# Research Pack: ${topic}\n*${date} · ${articles.length} articles*\n\n---\n\n`;
       articles.forEach((a, i) => {
-        // Title is a hyperlink — URL embedded, doesn't appear separately
-        const titleLink = `[${a.title || a.url}](${a.url})`;
+        // Title is a hyperlink — use source domain for Google News articles
+        const isGNewsmd  = (a.url || '').includes('news.google.com');
+        const linkUrl    = isGNewsmd && a.source_domain ? `https://${a.source_domain}` : a.url;
+        const titleLink  = `[${a.title || a.url}](${linkUrl})`;
         const src   = sourceOf(a);
         const dated = fmtDate(a.published_at);
         const meta  = [src, dated].filter(Boolean).join(' · ');
@@ -2356,10 +2359,14 @@
       // Plain text — compact: title — URL, source · date, optional summary
       text = `RESEARCH PACK: ${topic.toUpperCase()}\n${date} · ${articles.length} articles\n\n`;
       articles.forEach((a, i) => {
-        const src   = sourceOf(a);
-        const dated = fmtDate(a.published_at);
-        const meta  = [src, dated].filter(Boolean).join(' · ');
-        text += `${a.title || a.url} — ${a.url}\n`;
+        const src      = sourceOf(a);
+        const dated    = fmtDate(a.published_at);
+        const meta     = [src, dated].filter(Boolean).join(' · ');
+        const isGNews  = (a.url || '').includes('news.google.com');
+        const displayUrl = isGNews
+          ? (a.source_domain ? `https://${a.source_domain}` : '[Google News]')
+          : a.url;
+        text += `${a.title || a.url} — ${displayUrl}\n`;
         if (meta) text += `${meta}\n`;
         if (hasSummaries && summaries[String(a.id)]) {
           text += `${summaries[String(a.id)]}\n`;
