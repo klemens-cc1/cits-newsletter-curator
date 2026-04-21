@@ -1,10 +1,13 @@
 import csv
 import io
+import logging
 import os
 import re
 import html as html_lib
 import threading
 import urllib.parse
+
+log = logging.getLogger(__name__)
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 
@@ -389,6 +392,12 @@ def fetch_article_description(url: str) -> str:
             },
             timeout=12,
         )
+        log.info(f"fetch_desc: HTTP {resp.status_code} for {url}")
+
+        if resp.status_code != 200:
+            log.warning(f"fetch_desc: non-200 status {resp.status_code} — first 300 chars: {resp.text[:300]!r}")
+            return ""
+
         raw = resp.text
 
         def extract_content(tag_html: str) -> str:
@@ -410,6 +419,7 @@ def fetch_article_description(url: str) -> str:
             if tag_m:
                 val = extract_content(tag_m.group(0))
                 if val:
+                    log.info(f"fetch_desc: found meta description ({len(val)} chars)")
                     return val
 
         # Fallback: first substantive <p> tag
@@ -419,10 +429,13 @@ def fetch_article_description(url: str) -> str:
             text = html_lib.unescape(text).strip()
             text = re.sub(r'\s+', ' ', text)
             if len(text) > 100:
+                log.info(f"fetch_desc: used <p> fallback ({len(text)} chars)")
                 return text[:400]
 
+        log.warning(f"fetch_desc: no description found. Response length={len(raw)}, first 500 chars: {raw[:500]!r}")
         return ""
-    except Exception:
+    except Exception as e:
+        log.error(f"fetch_desc: exception for {url} — {type(e).__name__}: {e}")
         return ""
 
 
