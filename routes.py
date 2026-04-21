@@ -385,34 +385,41 @@ def fetch_article_description(url: str) -> str:
             url,
             headers={
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml",
+                "Accept": "text/html,application/xhtml+xml,*/*",
             },
-            timeout=8,
+            timeout=12,
         )
         raw = resp.text
 
-        # 1. <meta name="description"> — try both attribute orderings
-        m = re.search(r'<meta[^>]+name=["\']description["\'][^>]+content=["\']([^"\']{30,})["\']', raw, re.IGNORECASE)
-        if not m:
-            m = re.search(r'<meta[^>]+content=["\']([^"\']{30,})["\'][^>]+name=["\']description["\']', raw, re.IGNORECASE)
+        def extract_content(tag_html: str) -> str:
+            """Extract content= value from a meta tag, handling both quote styles."""
+            m = re.search(r'content="([^"]{20,})"', tag_html, re.IGNORECASE)
+            if not m:
+                m = re.search(r"content='([^']{20,})'", tag_html, re.IGNORECASE)
+            return html_lib.unescape(m.group(1).strip()) if m else ""
 
-        # 2. <meta property="og:description">
-        if not m:
-            m = re.search(r'<meta[^>]+property=["\']og:description["\'][^>]+content=["\']([^"\']{30,})["\']', raw, re.IGNORECASE)
-        if not m:
-            m = re.search(r'<meta[^>]+content=["\']([^"\']{30,})["\'][^>]+property=["\']og:description["\']', raw, re.IGNORECASE)
+        # Find the meta tag block first (permissive, single-line or multi-attribute)
+        patterns = [
+            r'<meta[^>]+name=["\']description["\'][^>]*/?>',
+            r'<meta[^>]+name=["\']Description["\'][^>]*/?>',
+            r'<meta[^>]+property=["\']og:description["\'][^>]*/?>',
+            r'<meta[^>]+property=["\']og:Description["\'][^>]*/?>',
+        ]
+        for pat in patterns:
+            tag_m = re.search(pat, raw, re.IGNORECASE)
+            if tag_m:
+                val = extract_content(tag_m.group(0))
+                if val:
+                    return val
 
-        if m:
-            return html_lib.unescape(m.group(1).strip())
-
-        # 3. First substantive <p> tag as fallback
+        # Fallback: first substantive <p> tag
         paragraphs = re.findall(r'<p[^>]*>(.*?)</p>', raw, re.DOTALL | re.IGNORECASE)
         for p in paragraphs:
             text = re.sub(r'<[^>]+>', '', p)
             text = html_lib.unescape(text).strip()
             text = re.sub(r'\s+', ' ', text)
             if len(text) > 100:
-                return text[:300]
+                return text[:400]
 
         return ""
     except Exception:

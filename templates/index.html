@@ -207,6 +207,35 @@
     /* ── Layout ── */
     .layout { display: flex; height: calc(100vh - 64px - 45px); }
 
+    /* ── Filter back bar ── */
+    .filter-back-bar {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 20px;
+      background: #fff8f8;
+      border-bottom: 1px solid #f0d0d0;
+      font-family: 'Oswald', sans-serif;
+      font-size: 11px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--gray);
+    }
+    .filter-back-bar.visible { display: flex; }
+    .filter-back-btn {
+      font-family: 'Oswald', sans-serif;
+      font-size: 11px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--red);
+      background: none;
+      border: 1px solid #f0d0d0;
+      padding: 3px 10px;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    .filter-back-btn:hover { border-color: var(--red); }
+
     /* ── Sidebar ── */
     .sidebar {
       width: 240px;
@@ -299,7 +328,7 @@
     .export-btn.secondary:hover { background: var(--red); color: var(--white); border-color: var(--red); }
 
     /* ── Article list ── */
-    .article-list { flex: 1; overflow-y: auto; padding: 0; }
+    .article-list { flex: 1; overflow-y: auto; padding: 0; min-height: 0; }
 
     /* ── Category group ── */
     .category-group {}
@@ -803,19 +832,25 @@
       </div>
     </aside>
 
-    <main class="article-list" id="articleList">
-      <div class="triage-progress" id="triageProgress">
-        <span class="triage-progress-label">Progress</span>
-        <div class="triage-progress-track">
-          <div class="triage-progress-fill" id="triageProgressFill"></div>
+    <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
+      <div class="filter-back-bar" id="filterBackBar">
+        <button class="filter-back-btn" onclick="clearAllFilters()">← All Articles</button>
+        <span id="filterBackLabel"></span>
+      </div>
+      <main class="article-list" id="articleList">
+        <div class="triage-progress" id="triageProgress">
+          <span class="triage-progress-label">Progress</span>
+          <div class="triage-progress-track">
+            <div class="triage-progress-fill" id="triageProgressFill"></div>
+          </div>
+          <span class="triage-progress-count"><span id="triageReviewed">0</span> / <span id="triageTotal">0</span> reviewed</span>
         </div>
-        <span class="triage-progress-count"><span id="triageReviewed">0</span> / <span id="triageTotal">0</span> reviewed</span>
-      </div>
-      <div class="loading">Loading articles…</div>
-      <div class="triage-hint">
-        <kbd>↑↓</kbd> navigate &nbsp;·&nbsp; <kbd>S</kbd> select &nbsp;·&nbsp; <kbd>M</kbd> maybe &nbsp;·&nbsp; <kbd>X</kbd> skip &nbsp;·&nbsp; <kbd>Enter</kbd> open link &nbsp;·&nbsp; <kbd>C</kbd> exit triage
-      </div>
-    </main>
+        <div class="loading">Loading articles…</div>
+        <div class="triage-hint">
+          <kbd>↑↓</kbd> navigate &nbsp;·&nbsp; <kbd>S</kbd> select &nbsp;·&nbsp; <kbd>M</kbd> maybe &nbsp;·&nbsp; <kbd>X</kbd> skip &nbsp;·&nbsp; <kbd>Enter</kbd> open link &nbsp;·&nbsp; <kbd>C</kbd> exit triage
+        </div>
+      </main>
+    </div>
 
   </div>
 
@@ -938,6 +973,32 @@
       filters[type] = value;
       btn.parentElement.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
+      updateFilterBackBar();
+      loadArticles();
+    }
+
+    function updateFilterBackBar() {
+      const bar   = document.getElementById("filterBackBar");
+      const label = document.getElementById("filterBackLabel");
+      const active = [];
+      if (filters.source)   active.push(`Source: ${filters.source}`);
+      if (filters.category) active.push(`Category: ${filters.category}`);
+      if (active.length) {
+        bar.classList.add("visible");
+        label.textContent = active.join(" · ");
+      } else {
+        bar.classList.remove("visible");
+        label.textContent = "";
+      }
+    }
+
+    function clearAllFilters() {
+      filters.source   = "";
+      filters.category = "";
+      // Reset sidebar buttons to "All"
+      document.querySelectorAll("#categoryFilters .filter-btn").forEach((b, i) => b.classList.toggle("active", i === 0));
+      document.querySelectorAll("#sourceFilters .filter-btn").forEach((b, i) => b.classList.toggle("active", i === 0));
+      updateFilterBackBar();
       loadArticles();
     }
 
