@@ -29,7 +29,7 @@
     /* ── Header ── */
     header {
       background: var(--charcoal);
-      padding: 0 32px;
+      padding: 0 32px 0 20px;
       display: flex;
       align-items: center;
       gap: 14px;
@@ -299,9 +299,10 @@
 <body>
 
 <header>
-  <img src="{{ url_for('static', filename='CITSLOGOHeader.png') }}" alt="CITS — Center for International Trade and Security" style="height:44px;object-fit:contain;flex-shrink:0;">
+  <img src="{{ url_for('static', filename='CITSLOGOHeader.png') }}" alt="CITS — Center for International Trade and Security" style="height:44px;object-fit:contain;flex-shrink:0;border-radius:5px;">
   <div class="header-divider"></div>
-  <div class="header-spacer"></div>
+  <div class="header-sub">Delphi</div>
+  <div class="header-divider"></div>
   <a href="/" class="nav-link active">Home</a>
   <a href="/newsletter" class="nav-link">Newsletter</a>
   <a href="/research" class="nav-link">Research</a>
@@ -312,8 +313,8 @@
 
   <!-- Hero -->
   <div class="hero">
-    <div class="hero-eyebrow">University of Georgia</div>
-    <h1 class="hero-title">CITS Research<br>Platform</h1>
+    <div class="hero-eyebrow">Center for International Trade and Security</div>
+    <h1 class="hero-title">Delphi</h1>
     <p class="hero-subtitle">A curation and research tool for the Center for International Trade and Security</p>
     <div class="hero-rule"></div>
   </div>
