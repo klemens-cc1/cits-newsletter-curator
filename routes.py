@@ -1002,6 +1002,39 @@ def _google_source_fields(entry) -> tuple[str, str]:
     return name.strip(), domain.strip()
 
 
+def _extract_google_entry_url(entry) -> str:
+    """Return the best available publisher URL from a Google News feedparser entry.
+
+    Checks fields in confidence order and returns the first non-Google URL found.
+    Falls back to entry.link (the Google News blob) if nothing better is available.
+    """
+    fallback = getattr(entry, 'link', '') or ''
+
+    # 1. feedburner:origLink — explicit original URL, highest confidence
+    orig = getattr(entry, 'feedburner_origlink', '') or ''
+    if orig and 'google.com' not in orig:
+        return orig
+
+    # 2. entry.source.href — Google News RSS <source url="..."> tag; real publisher domain
+    src = getattr(entry, 'source', None) or {}
+    href = (src.get('href') if isinstance(src, dict) else getattr(src, 'href', '')) or ''
+    # source href is the publisher homepage (e.g. https://brookings.edu), not the article —
+    # useful as a domain reference but not a specific article URL; skip for now
+
+    # 3. entry.links — scan for a non-Google alternate/via link
+    for lnk in getattr(entry, 'links', []):
+        lhref = lnk.get('href', '') if isinstance(lnk, dict) else getattr(lnk, 'href', '')
+        if lhref and 'google.com' not in lhref and lhref.startswith('http'):
+            return lhref
+
+    # 4. entry.id — sometimes the real URL, not for Google News but worth checking
+    entry_id = getattr(entry, 'id', '') or ''
+    if entry_id and 'google.com' not in entry_id and entry_id.startswith('http'):
+        return entry_id
+
+    return fallback
+
+
 def search_google_news(query: str, date_days: int | None = None) -> list[dict]:
     """Fetch up to 25 results from Google News RSS for a query."""
     if date_days:
@@ -1013,7 +1046,7 @@ def search_google_news(query: str, date_days: int | None = None) -> list[dict]:
         parsed = fp_lib.parse(url)
         results = []
         for entry in parsed.entries[:25]:
-            link = getattr(entry, "link", "") or ""
+            link = _extract_google_entry_url(entry)
             title = getattr(entry, "title", "") or ""
             source_name, source_domain = _google_source_fields(entry)
             # Guarantee title ends with ' - Source Name' so sourceOf() can display it.
