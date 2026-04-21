@@ -196,6 +196,7 @@ def ingest():
             except Exception:
                 pass
 
+        rss_summary = (a.get("summary") or "").strip() or None
         db.session.add(Article(
             guid=a["guid"],
             title=a["title"],
@@ -204,6 +205,7 @@ def ingest():
             category=a.get("category", "General"),
             published_at=pub,
             week_key=week_key,
+            ai_summary=rss_summary,
         ))
         added += 1
 
@@ -395,7 +397,7 @@ def fetch_article_description(url: str) -> str:
         log.info(f"fetch_desc: HTTP {resp.status_code} for {url}")
 
         if resp.status_code != 200:
-            log.warning(f"fetch_desc: non-200 status {resp.status_code} — first 300 chars: {resp.text[:300]!r}")
+            log.info(f"fetch_desc: non-200 status {resp.status_code} for {url} (likely bot block)")
             return ""
 
         raw = resp.text
