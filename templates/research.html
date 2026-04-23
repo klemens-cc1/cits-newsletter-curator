@@ -2220,6 +2220,7 @@
     'DOE','DOD','EPA','EIA','NRC','CIA','NSA','FBI','FDA','CDC','WHO','IMF','WTO',
     'LNG','SMR','CCS','CCUS','AI','API','GDP','CO2','CO₂','GHG','EV','RNG',
     'UAE','KSA','PRC','ROK','DPRK','G7','G20','BRICS',
+    'Reuters','Bloomberg','AP','AFP','BBC','CNN','NPR','WSJ','NYT','FT',
     'II','III','IV','VI','VII','VIII','IX','XI','XII',
   ]);
   function toSentenceCase(str) {
@@ -2256,7 +2257,12 @@
   // Format a single article as a citation string.
   // `fmt` is 'markdown' or 'text' — italics rendered as *…* only in markdown.
   function formatCitation(a, style, fmt) {
-    const title    = a.title || a.url;
+    // Google News appends " - Publisher Name" to titles; strip it so citations don't repeat the source
+    const rawTitle = a.title || a.url;
+    const isGNewsTitle = (a.url || '').includes('news.google.com');
+    const title = isGNewsTitle
+      ? rawTitle.replace(/\s+-\s+[^-]{2,80}$/, '').trim() || rawTitle
+      : rawTitle;
     const rawSrc   = sourceOf(a);
     const src      = cleanSourceName(rawSrc, a.url);
     const dateObj  = a.published_at
