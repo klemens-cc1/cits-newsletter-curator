@@ -2345,28 +2345,29 @@
     if (fmt === 'markdown') {
       text = `# Research Pack: ${topic}\n*${date} · ${articles.length} articles*\n\n---\n\n`;
       articles.forEach((a, i) => {
-        // Title is a hyperlink — use source domain for Google News articles
         const isGNewsmd  = (a.url || '').includes('news.google.com');
         const linkUrl    = isGNewsmd && a.source_domain ? `https://${a.source_domain}` : a.url;
-        const titleLink  = `[${a.title || a.url}](${linkUrl})`;
         const src   = sourceOf(a);
         const dated = fmtDate(a.published_at);
         const meta  = [src, dated].filter(Boolean).join(' · ');
-        text += `### ${titleLink}\n`;
-        if (meta) text += `*${meta}*\n`;
+        // With inline citations the formal citation replaces the informal header
+        if (!(cite && citePlacement === 'inline')) {
+          text += `### [${a.title || a.url}](${linkUrl})\n`;
+          if (meta) text += `*${meta}*\n`;
+        }
         if (hasSummaries && summaries[String(a.id)]) {
           text += `\n${summaries[String(a.id)]}\n`;
         }
         if (a.curator_note) text += `\n> ${a.curator_note}\n`;
         if (cite && citePlacement === 'inline') {
-          text += `\n*${formatCitation(a, citeStyle, 'markdown')}*\n`;
+          text += `${formatCitation(a, citeStyle, 'markdown')}\n`;
         }
         if (cite && citePlacement === 'endnotes') refs.push(`${i+1}. ${formatCitation(a, citeStyle, 'markdown')}`);
         text += '\n';
       });
       if (refs.length) text += `---\n\n## References\n\n${refs.join('\n')}\n`;
     } else {
-      // Plain text — compact: title — URL, source · date, optional summary
+      // Plain text
       text = `RESEARCH PACK: ${topic.toUpperCase()}\n${date} · ${articles.length} articles\n\n`;
       articles.forEach((a, i) => {
         const src      = sourceOf(a);
@@ -2376,8 +2377,11 @@
         const displayUrl = isGNews
           ? (a.source_domain ? `https://${a.source_domain}` : '[Google News]')
           : a.url;
-        text += `${a.title || a.url} — ${displayUrl}\n`;
-        if (meta) text += `${meta}\n`;
+        // With inline citations the formal citation replaces the informal header
+        if (!(cite && citePlacement === 'inline')) {
+          text += `${a.title || a.url} — ${displayUrl}\n`;
+          if (meta) text += `${meta}\n`;
+        }
         if (hasSummaries && summaries[String(a.id)]) {
           text += `${summaries[String(a.id)]}\n`;
         }
