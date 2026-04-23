@@ -2257,13 +2257,14 @@
   // Format a single article as a citation string.
   // `fmt` is 'markdown' or 'text' — italics rendered as *…* only in markdown.
   function formatCitation(a, style, fmt) {
-    // Google News appends " - Publisher Name" to titles; strip it so citations don't repeat the source
+    // RSS feeds and Google News append " - Publisher Name" to titles.
+    // Strip it when the suffix matches the detected source so citations don't repeat the publisher.
     const rawTitle = a.title || a.url;
-    const isGNewsTitle = (a.url || '').includes('news.google.com');
-    const title = isGNewsTitle
-      ? rawTitle.replace(/\s+-\s+[^-]{2,80}$/, '').trim() || rawTitle
-      : rawTitle;
     const rawSrc   = sourceOf(a);
+    const _sfx = rawTitle.match(/^(.*?)\s+-\s+([^-]{2,80})$/);
+    const title = (_sfx && rawSrc.toLowerCase().includes(_sfx[2].trim().toLowerCase()))
+      ? _sfx[1].trim() || rawTitle
+      : rawTitle;
     const src      = cleanSourceName(rawSrc, a.url);
     const dateObj  = a.published_at
                        ? new Date(a.published_at)
