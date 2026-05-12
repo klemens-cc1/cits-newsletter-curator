@@ -1783,16 +1783,20 @@ def debug_academic_search():
     except Exception as exc:
         osti_raw_info = {'error': str(exc)}
 
-    # Raw Semantic Scholar probe
+    # Raw Semantic Scholar probe — with API key so we test the actual auth path
     s2_raw_info = {}
     try:
+        s2_key = os.environ.get('SEMANTIC_SCHOLAR_API_KEY', '')
+        s2_headers = {'x-api-key': s2_key} if s2_key else {}
         r2 = req_lib.get(
             'https://api.semanticscholar.org/graph/v1/paper/search',
             params={'query': query, 'fields': 'title,abstract,citationCount', 'limit': 3},
+            headers=s2_headers,
             timeout=20,
         )
         s2_raw_info = {
             'status': r2.status_code,
+            'key_sent': bool(s2_key),
             'content_type': r2.headers.get('Content-Type', ''),
             'text_sample': r2.text[:600],
         }
