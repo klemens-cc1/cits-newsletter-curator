@@ -1811,9 +1811,11 @@ def debug_academic_search():
 
 @bp.route("/api/debug/env")
 def debug_env():
-    key = os.environ.get("GROQ_API_KEY", "NOT SET")
+    groq = os.environ.get("GROQ_API_KEY", "")
+    s2   = os.environ.get("SEMANTIC_SCHOLAR_API_KEY", "")
     return jsonify({
-        "key_set": key != "NOT SET",
-        "key_prefix": key[:8] if key != "NOT SET" else "NOT SET",
-        "key_length": len(key) if key != "NOT SET" else 0,
+        "groq_key_set":    bool(groq),
+        "groq_key_prefix": groq[:8] if groq else "NOT SET",
+        "s2_key_set":      bool(s2),
+        "s2_key_prefix":   s2[:8] if s2 else "NOT SET",
     })
