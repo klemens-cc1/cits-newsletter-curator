@@ -1182,7 +1182,7 @@ def search_semantic_scholar(query: str, date_days: int | None = None,
         params['year'] = f"{year_cutoff}-{now_year}"
 
     headers: dict = {}
-    api_key = os.environ.get('SEMANTIC_SCHOLAR_API_KEY', '')
+    api_key = os.environ.get('SEMANTIC_SCHOLAR_API_KEY', '').strip()
     if api_key:
         headers['x-api-key'] = api_key
 
@@ -1786,7 +1786,7 @@ def debug_academic_search():
     # Raw Semantic Scholar probe — with API key so we test the actual auth path
     s2_raw_info = {}
     try:
-        s2_key = os.environ.get('SEMANTIC_SCHOLAR_API_KEY', '')
+        s2_key = os.environ.get('SEMANTIC_SCHOLAR_API_KEY', '').strip()
         s2_headers = {'x-api-key': s2_key} if s2_key else {}
         r2 = req_lib.get(
             'https://api.semanticscholar.org/graph/v1/paper/search',
@@ -1816,7 +1816,7 @@ def debug_academic_search():
 @bp.route("/api/debug/env")
 def debug_env():
     groq = os.environ.get("GROQ_API_KEY", "")
-    s2   = os.environ.get("SEMANTIC_SCHOLAR_API_KEY", "")
+    s2   = os.environ.get("SEMANTIC_SCHOLAR_API_KEY", "").strip()
     return jsonify({
         "groq_key_set":    bool(groq),
         "groq_key_prefix": groq[:8] if groq else "NOT SET",
