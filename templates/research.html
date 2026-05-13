@@ -729,7 +729,7 @@
       white-space: nowrap;
     }
     .cluster-chip:hover { border-color: #aaa; color: var(--charcoal); }
-    .cluster-chip.active { background: var(--charcoal); color: var(--white); border-color: var(--charcoal); }
+    .cluster-chip.active { background: var(--red); color: var(--white); border-color: var(--red); }
     .cluster-chip.other { font-style: italic; }
     .cluster-clear {
       font-family: 'Oswald', sans-serif;
@@ -745,18 +745,18 @@
     .cluster-clear:hover { color: var(--red); }
     .cluster-btn {
       font-family: 'Oswald', sans-serif;
-      font-size: 10px;
-      letter-spacing: 1.5px;
+      font-size: 11px;
+      letter-spacing: 2px;
       text-transform: uppercase;
-      color: var(--gray);
-      background: none;
-      border: 1px solid var(--border);
-      padding: 3px 10px;
+      color: var(--white);
+      background: var(--red);
+      border: 1px solid var(--red);
+      padding: 4px 13px;
       cursor: pointer;
-      transition: all 0.12s;
+      transition: filter 0.15s;
     }
-    .cluster-btn:hover { color: var(--charcoal); border-color: #aaa; }
-    .cluster-btn:disabled { opacity: 0.45; cursor: wait; }
+    .cluster-btn:hover { filter: brightness(0.85); }
+    .cluster-btn:disabled { opacity: 0.5; cursor: wait; filter: none; }
 
     .seen-dot {
       font-family: 'Oswald', sans-serif;
