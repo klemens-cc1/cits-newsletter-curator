@@ -1,5 +1,6 @@
 import csv
 import io
+import json
 import logging
 import os
 import re
@@ -543,6 +544,78 @@ def delete_research_session(session_id):
     db.session.delete(session)
     db.session.commit()
     return jsonify({"deleted": session_id})
+
+
+# ── Sub-theme clustering ──────────────────────────────────────────────────────
+
+@bp.route("/api/research/sessions/<int:session_id>/cluster", methods=["POST"])
+def cluster_session(session_id):
+    """Group session articles into sub-themes using Groq."""
+    ResearchSession.query.get_or_404(session_id)
+    articles = ResearchArticle.query.filter_by(session_id=session_id).all()
+    if not articles:
+        return jsonify({"clusters": []})
+
+    groq_key = os.environ.get("GROQ_API_KEY", "")
+    if not groq_key:
+        return jsonify({"error": "Groq API key not configured"}), 503
+
+    n = len(articles)
+    n_clusters = 2 if n < 10 else (3 if n < 20 else (4 if n < 40 else 5))
+
+    lines = []
+    for a in articles:
+        desc = (a.description or a.ai_summary or "")[:100].replace("\n", " ")
+        lines.append(f'[{a.id}] {(a.title or "").strip()}'
+                     + (f' | {desc}' if desc else ''))
+
+    article_list = "\n".join(lines)
+    prompt = f"""You are a research analyst. Group the following {n} articles into {n_clusters} thematic clusters.
+
+Articles (format: [id] title | abstract excerpt):
+{article_list}
+
+Return ONLY valid JSON — no markdown, no explanation:
+{{
+  "clusters": [
+    {{"label": "2-5 word theme name", "ids": [1, 4, 7]}},
+    {{"label": "Another Theme", "ids": [2, 5]}},
+    {{"label": "Other", "ids": [3, 6, 8]}}
+  ]
+}}
+
+Rules:
+- Exactly {n_clusters} clusters total; use "Other" for articles that don't fit the main themes
+- Labels must be 2-5 words, specific and descriptive (not generic like "Miscellaneous")
+- Every article ID must appear in exactly one cluster
+- Return raw JSON only"""
+
+    try:
+        resp = req_lib.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+            json={
+                "model": "llama-3.3-70b-versatile",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 800,
+                "temperature": 0.2,
+            },
+            timeout=30,
+        )
+        raw = resp.json()["choices"][0]["message"]["content"].strip()
+        # Strip markdown code fences if present
+        raw = re.sub(r'^```(?:json)?\s*', '', raw, flags=re.MULTILINE)
+        raw = re.sub(r'\s*```$', '', raw, flags=re.MULTILINE)
+        data = json.loads(raw)
+        clusters = data.get("clusters", [])
+        # Validate all IDs belong to this session
+        valid_ids = {a.id for a in articles}
+        for c in clusters:
+            c["ids"] = [i for i in c.get("ids", []) if i in valid_ids]
+        return jsonify({"clusters": clusters})
+    except Exception as exc:
+        log.warning(f"Cluster failed for session {session_id}: {exc}")
+        return jsonify({"error": "Clustering failed — try again"}), 500
 
 
 # ── Research history / seen-check ─────────────────────────────────────────────

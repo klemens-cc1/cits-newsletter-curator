@@ -697,6 +697,67 @@
       margin: 0 5px;
       color: #bbb;
     }
+    /* ── Cluster strip ── */
+    .cluster-strip {
+      display: none;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 10px 0 4px;
+      border-top: 1px solid var(--border);
+      margin-top: 4px;
+      align-items: center;
+    }
+    .cluster-strip.visible { display: flex; }
+    .cluster-strip-label {
+      font-family: 'Oswald', sans-serif;
+      font-size: 9px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #bbb;
+      margin-right: 2px;
+    }
+    .cluster-chip {
+      font-family: 'Oswald', sans-serif;
+      font-size: 11px;
+      letter-spacing: 0.5px;
+      padding: 3px 10px;
+      border: 1px solid var(--border);
+      background: var(--white);
+      color: var(--gray);
+      cursor: pointer;
+      transition: all 0.12s;
+      white-space: nowrap;
+    }
+    .cluster-chip:hover { border-color: #aaa; color: var(--charcoal); }
+    .cluster-chip.active { background: var(--charcoal); color: var(--white); border-color: var(--charcoal); }
+    .cluster-chip.other { font-style: italic; }
+    .cluster-clear {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 1px;
+      color: #bbb;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 3px 6px;
+      margin-left: auto;
+    }
+    .cluster-clear:hover { color: var(--red); }
+    .cluster-btn {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--gray);
+      background: none;
+      border: 1px solid var(--border);
+      padding: 3px 10px;
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+    .cluster-btn:hover { color: var(--charcoal); border-color: #aaa; }
+    .cluster-btn:disabled { opacity: 0.45; cursor: wait; }
+
     .seen-dot {
       font-family: 'Oswald', sans-serif;
       font-size: 10px;
@@ -1461,6 +1522,11 @@
       <option value="source">Source</option>
     </select>
     <span class="import-hint" id="showing-label" style="margin-left:auto"></span>
+    <button class="cluster-btn" id="cluster-btn" onclick="runClustering()">Cluster ✦</button>
+  </div>
+
+  <div class="cluster-strip" id="cluster-strip">
+    <span class="cluster-strip-label">Themes</span>
   </div>
 
   <div class="stats-bar" id="filter-bar">
@@ -1578,7 +1644,9 @@
 
 <script>
   let currentSessionId = null;
-  let seenMap = {};  // url -> [{topic, status, session_id, date}] from prior sessions
+  let seenMap = {};       // url -> [{topic, status, session_id, date}] from prior sessions
+  let clusterData = [];   // [{label, ids}] from last cluster run
+  let currentCluster = null;  // active cluster label filter
   let allArticles = [];
   let currentFilter = 'all';
   let currentSort = 'score';
@@ -1797,6 +1865,57 @@
 
   function backToSessions() { showListView(); }
 
+  async function runClustering() {
+    if (!currentSessionId || !allArticles.length) return;
+    const btn = document.getElementById('cluster-btn');
+    btn.disabled = true;
+    btn.textContent = 'Clustering…';
+    try {
+      const res  = await fetch(`/api/research/sessions/${currentSessionId}/cluster`, { method: 'POST' });
+      const data = await res.json();
+      if (data.error) { toast(data.error, true); return; }
+      clusterData    = data.clusters || [];
+      currentCluster = null;
+      renderClusterStrip();
+      renderArticles();
+      if (!clusterData.length) toast('No clusters returned', true);
+    } catch (e) {
+      toast('Clustering failed', true);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Re-cluster ✦';
+    }
+  }
+
+  function renderClusterStrip() {
+    const strip = document.getElementById('cluster-strip');
+    if (!clusterData.length) { strip.className = 'cluster-strip'; return; }
+    strip.className = 'cluster-strip visible';
+    const chips = clusterData.map(c => {
+      const isOther  = c.label.toLowerCase() === 'other';
+      const isActive = c.label === currentCluster;
+      return `<button class="cluster-chip${isOther ? ' other' : ''}${isActive ? ' active' : ''}"
+        onclick="setCluster(${JSON.stringify(c.label)})">${escHtml(c.label)}
+        <span style="opacity:0.6;font-size:10px"> ${c.ids.length}</span></button>`;
+    }).join('');
+    strip.innerHTML = `<span class="cluster-strip-label">Themes</span>${chips}
+      <button class="cluster-clear" onclick="clearClustering()" title="Remove clustering">✕ Clear</button>`;
+  }
+
+  function setCluster(label) {
+    currentCluster = currentCluster === label ? null : label;
+    renderClusterStrip();
+    renderArticles();
+  }
+
+  function clearClustering() {
+    clusterData    = [];
+    currentCluster = null;
+    document.getElementById('cluster-strip').className = 'cluster-strip';
+    document.getElementById('cluster-btn').textContent = 'Cluster ✦';
+    renderArticles();
+  }
+
   function showListView() {
     document.getElementById('session-list-view').style.display = '';
     document.getElementById('session-detail-view').style.display = 'none';
@@ -1811,6 +1930,9 @@
   async function openSession(id, topic) {
     currentSessionId = id;
     seenMap = {};
+    clusterData = [];
+    currentCluster = null;
+    document.getElementById('cluster-strip').className = 'cluster-strip';
     document.getElementById('detail-topic').textContent = topic;
     document.getElementById('search-query-input').value = topic;
     document.getElementById('session-list-view').style.display = 'none';
@@ -1871,9 +1993,13 @@
     const list = document.getElementById('article-list');
     focusedIndex = -1;
 
-    const filtered = currentFilter === 'all'
+    let filtered = currentFilter === 'all'
       ? allArticles
       : allArticles.filter(a => a.status === currentFilter);
+    if (currentCluster) {
+      const clusterIds = new Set(clusterData.find(c => c.label === currentCluster)?.ids || []);
+      filtered = filtered.filter(a => clusterIds.has(a.id));
+    }
 
     const visible = sortArticles(filtered);
 
