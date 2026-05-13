@@ -41,6 +41,7 @@ def _run_migrations(db):
         "ALTER TABLE research_articles ADD COLUMN IF NOT EXISTS source_name VARCHAR(256)",
         "ALTER TABLE research_articles ADD COLUMN IF NOT EXISTS source_domain VARCHAR(256)",
         "CREATE TABLE IF NOT EXISTS feedback (id SERIAL PRIMARY KEY, message TEXT NOT NULL, submitted_at TIMESTAMPTZ DEFAULT NOW())",
+        "ALTER TABLE research_sessions ADD COLUMN IF NOT EXISTS search_params TEXT",
     ]
     try:
         with db.engine.connect() as conn:

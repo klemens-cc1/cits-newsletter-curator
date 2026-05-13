@@ -664,12 +664,19 @@ def research_history_sessions():
     for s in sessions:
         total    = ResearchArticle.query.filter_by(session_id=s.id).count()
         selected = ResearchArticle.query.filter_by(session_id=s.id, status='selected').count()
+        sp = None
+        if s.search_params:
+            try:
+                sp = json.loads(s.search_params)
+            except Exception:
+                pass
         result.append({
-            'id':         s.id,
-            'topic':      s.topic,
-            'created_at': s.created_at.isoformat() if s.created_at else '',
-            'total':      total,
-            'selected':   selected,
+            'id':           s.id,
+            'topic':        s.topic,
+            'created_at':   s.created_at.isoformat() if s.created_at else '',
+            'total':        total,
+            'selected':     selected,
+            'search_params': sp,
         })
     return jsonify(result)
 
@@ -1643,11 +1650,8 @@ def _import_single_article(
             source_name = cr_journal
 
     # ── Keyword filters ───────────────────────────────────────────────────────
-    # Checked before scoring (cheaper than the Groq API call).
     haystack = f"{title} {description}".lower()
-    if must_include:
-        if not all(t.lower() in haystack for t in must_include if t):
-            return None
+    # must_exclude is a hard filter — any match skips the article
     if must_exclude:
         if any(t.lower() in haystack for t in must_exclude if t):
             return None
@@ -1657,6 +1661,12 @@ def _import_single_article(
         return None
 
     score = score_article_for_topic(topic, title or url, description)
+
+    # must_include is a soft boost — each matched term adds +1 to score
+    # (articles missing preferred terms are not excluded, just ranked lower)
+    if must_include:
+        boost = sum(1 for t in must_include if t and t.lower() in haystack)
+        score = min(10, score + boost)
 
     if score < min_score:
         return None
@@ -1889,6 +1899,32 @@ def start_research_search(session_id):
         must_exclude=_terms(data.get('must_exclude', '')),
         source_types=data.get('source_types', []),
     )
+
+    # Persist search params so history shows what settings were used
+    params_to_save = {}
+    if custom_query and custom_query != session.topic:
+        params_to_save['query'] = custom_query
+    if opts.date_days:
+        params_to_save['date_range'] = date_range
+    elif is_custom:
+        params_to_save['date_from'] = opts.date_from
+        params_to_save['date_to']   = opts.date_to
+    if opts.must_include:
+        params_to_save['preferred'] = opts.must_include
+    if opts.must_exclude:
+        params_to_save['exclude'] = opts.must_exclude
+    if opts.source_types:
+        params_to_save['sources'] = opts.source_types
+    if opts.max_results != 50:
+        params_to_save['max'] = opts.max_results
+    if opts.min_score > 1:
+        params_to_save['min_score'] = opts.min_score
+    if opts.english_only:
+        params_to_save['english_only'] = True
+    if params_to_save:
+        session.search_params = json.dumps(params_to_save)
+        db.session.commit()
+
     t = threading.Thread(
         target=run_research_search,
         args=(flask_app, job.id, session_id, session.topic, opts),

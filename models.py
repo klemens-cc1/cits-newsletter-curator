@@ -67,21 +67,30 @@ class RefreshLog(db.Model):
 class ResearchSession(db.Model):
     __tablename__ = "research_sessions"
 
-    id         = db.Column(db.Integer, primary_key=True)
-    topic      = db.Column(db.Text, nullable=False)
-    owner      = db.Column(db.String(128), nullable=True)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    id            = db.Column(db.Integer, primary_key=True)
+    topic         = db.Column(db.Text, nullable=False)
+    owner         = db.Column(db.String(128), nullable=True)
+    created_at    = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    search_params = db.Column(db.Text, nullable=True)  # JSON: date_range, preferred, exclude, etc.
 
     articles = db.relationship("ResearchArticle", backref="session",
                                lazy=True, cascade="all, delete-orphan")
 
     def to_dict(self):
+        import json as _json
+        params = None
+        if self.search_params:
+            try:
+                params = _json.loads(self.search_params)
+            except Exception:
+                pass
         return {
-            "id":         self.id,
-            "topic":      self.topic,
-            "owner":      self.owner,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "id":           self.id,
+            "topic":        self.topic,
+            "owner":        self.owner,
+            "created_at":   self.created_at.isoformat() if self.created_at else None,
             "article_count": len(self.articles),
+            "search_params": params,
         }
 
 

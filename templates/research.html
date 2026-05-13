@@ -501,6 +501,25 @@
       color: var(--gray);
     }
     .stat-chip span { color: var(--charcoal); font-size: 15px; }
+    .search-params-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 10px;
+    }
+    .search-params-bar:empty { display: none; }
+    .param-chip {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--gray);
+      border: 1px solid var(--border);
+      padding: 2px 8px;
+      white-space: nowrap;
+    }
+    .param-chip.param-preferred { border-color: var(--red); color: var(--red); }
+    .param-chip.param-exclude   { border-color: #888; color: #888; }
     .filter-btn {
       font-family: 'Oswald', sans-serif;
       font-size: 11px;
@@ -1394,6 +1413,7 @@
       </div>
     </div>
     <div class="stats-bar" id="detail-stats"></div>
+    <div class="search-params-bar" id="detail-params"></div>
   </div>
 
   <div class="search-box">
@@ -1450,8 +1470,8 @@
       </div>
       <div class="adv-row">
         <div class="adv-field adv-field-wide">
-          <label class="adv-label">Must include <span>(comma-separated)</span></label>
-          <input type="text" class="adv-text" id="adv-must-include" placeholder="e.g. sanctions, export controls">
+          <label class="adv-label">Preferred terms <span>(comma-separated · each match +1 score)</span></label>
+          <input type="text" class="adv-text" id="adv-must-include" placeholder="e.g. hyperscale, sanctions">
         </div>
         <div class="adv-field adv-field-wide">
           <label class="adv-label">Must exclude <span>(comma-separated)</span></label>
@@ -1787,6 +1807,7 @@
         // Main session card (list view)
         const card = document.createElement('div');
         card.className = 'session-card';
+        const paramChipsHtml = buildParamChipsHtml(s.search_params);
         card.innerHTML = `
           <div class="session-topic">${escHtml(s.topic)}</div>
           <div class="session-meta">
@@ -1794,6 +1815,7 @@
             <span>${s.selected}</span> selected &nbsp;·&nbsp;
             ${new Date(s.created_at).toLocaleDateString()}
           </div>
+          ${paramChipsHtml ? `<div class="search-params-bar" style="margin-top:6px">${paramChipsHtml}</div>` : ''}
           <button class="btn-icon" title="Delete" onclick="event.stopPropagation(); quickDeleteSession(${s.id}, this)">✕</button>
         `;
         card.addEventListener('click', () => openSession(s.id, s.topic));
@@ -1958,6 +1980,7 @@
     const res = await fetch(`/api/research/sessions/${currentSessionId}`);
     const data = await res.json();
     allArticles = data.articles || [];
+    renderSearchParamsChips(data.search_params || null);
     renderStats();
     renderArticles();
     // Background: check which URLs appeared in other sessions
@@ -1985,6 +2008,31 @@
       <div class="stat-chip"><span>${maybe}</span> maybe</div>
       <div class="stat-chip"><span>${unrev}</span> unreviewed</div>
     `;
+  }
+
+  const _DR_LABELS = { '1d':'1 day','3d':'3 days','7d':'1 week','14d':'2 weeks',
+    '30d':'30 days','60d':'60 days','90d':'3 months','180d':'6 months',
+    '365d':'1 year','2y':'2 years','5y':'5 years' };
+
+  function buildParamChipsHtml(params) {
+    if (!params || !Object.keys(params).length) return '';
+    const chips = [];
+    if (params.date_range)   chips.push(`<span class="param-chip">${escHtml(_DR_LABELS[params.date_range] || params.date_range)}</span>`);
+    if (params.date_from)    chips.push(`<span class="param-chip">${escHtml(params.date_from)} → ${escHtml(params.date_to || '…')}</span>`);
+    if (params.preferred)    params.preferred.forEach(t => chips.push(`<span class="param-chip param-preferred">+ ${escHtml(t)}</span>`));
+    if (params.exclude)      params.exclude.forEach(t => chips.push(`<span class="param-chip param-exclude">– ${escHtml(t)}</span>`));
+    if (params.sources)      params.sources.forEach(s => chips.push(`<span class="param-chip">${escHtml(s)}</span>`));
+    if (params.max && params.max !== 50) chips.push(`<span class="param-chip">max ${params.max}</span>`);
+    if (params.min_score)    chips.push(`<span class="param-chip">score ≥ ${params.min_score}</span>`);
+    if (params.english_only) chips.push(`<span class="param-chip">EN only</span>`);
+    if (params.query)        chips.push(`<span class="param-chip" title="${escHtml(params.query)}">query: ${escHtml(params.query.slice(0,30))}${params.query.length>30?'…':''}</span>`);
+    return chips.join('');
+  }
+
+  function renderSearchParamsChips(params) {
+    const bar = document.getElementById('detail-params');
+    if (!bar) return;
+    bar.innerHTML = buildParamChipsHtml(params);
   }
 
   function setFilter(filter, btn) {
