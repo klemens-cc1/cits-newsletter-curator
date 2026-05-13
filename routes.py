@@ -545,6 +545,77 @@ def delete_research_session(session_id):
     return jsonify({"deleted": session_id})
 
 
+# ── Research history / seen-check ─────────────────────────────────────────────
+
+@bp.route("/api/research/sessions/<int:session_id>/seen-check", methods=["POST"])
+def seen_check(session_id):
+    """Given a list of URLs, return which ones appear in other sessions and with what status."""
+    urls = (request.get_json() or {}).get('urls', [])
+    if not urls:
+        return jsonify({})
+    matches = (
+        db.session.query(ResearchArticle, ResearchSession)
+        .join(ResearchSession, ResearchArticle.session_id == ResearchSession.id)
+        .filter(ResearchArticle.url.in_(urls), ResearchArticle.session_id != session_id)
+        .all()
+    )
+    result: dict = {}
+    for article, sess in matches:
+        result.setdefault(article.url, []).append({
+            'session_id': sess.id,
+            'topic':      sess.topic,
+            'status':     article.status,
+            'date':       sess.created_at.isoformat() if sess.created_at else '',
+        })
+    return jsonify(result)
+
+
+@bp.route("/api/research/history/sessions")
+def research_history_sessions():
+    """All sessions with article counts — for the history tab."""
+    sessions = ResearchSession.query.order_by(ResearchSession.created_at.desc()).all()
+    result = []
+    for s in sessions:
+        total    = ResearchArticle.query.filter_by(session_id=s.id).count()
+        selected = ResearchArticle.query.filter_by(session_id=s.id, status='selected').count()
+        result.append({
+            'id':         s.id,
+            'topic':      s.topic,
+            'created_at': s.created_at.isoformat() if s.created_at else '',
+            'total':      total,
+            'selected':   selected,
+        })
+    return jsonify(result)
+
+
+@bp.route("/api/research/history/search")
+def research_history_search():
+    """Full-text search across selected articles in all sessions."""
+    q = request.args.get('q', '').strip()
+    if not q:
+        return jsonify([])
+    matches = (
+        db.session.query(ResearchArticle, ResearchSession)
+        .join(ResearchSession, ResearchArticle.session_id == ResearchSession.id)
+        .filter(
+            ResearchArticle.status == 'selected',
+            ResearchArticle.title.ilike(f'%{q}%'),
+        )
+        .order_by(ResearchSession.created_at.desc())
+        .limit(40)
+        .all()
+    )
+    return jsonify([{
+        'id':            a.id,
+        'title':         a.title,
+        'url':           a.url,
+        'session_id':    s.id,
+        'session_topic': s.topic,
+        'session_date':  s.created_at.isoformat() if s.created_at else '',
+        'published_at':  a.published_at.isoformat() if a.published_at else '',
+    } for a, s in matches])
+
+
 # ── Research article import ────────────────────────────────────────────────────
 
 def score_article_for_topic(topic: str, title: str, description: str) -> int:

@@ -697,6 +697,31 @@
       margin: 0 5px;
       color: #bbb;
     }
+    .seen-dot {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      color: #bbb;
+      cursor: default;
+      position: relative;
+    }
+    .seen-dot::before { content: '·'; margin: 0 5px; color: #bbb; }
+    .seen-dot:hover { color: var(--gray); }
+    .seen-dot .seen-tooltip {
+      display: none;
+      position: absolute;
+      left: 0;
+      top: 18px;
+      background: var(--charcoal);
+      color: #eee;
+      font-size: 11px;
+      letter-spacing: 0.5px;
+      padding: 6px 10px;
+      white-space: nowrap;
+      z-index: 50;
+      pointer-events: none;
+      line-height: 1.6;
+    }
+    .seen-dot:hover .seen-tooltip { display: block; }
     .article-detail {
       padding: 10px 0 6px 40px;
     }
@@ -1553,6 +1578,7 @@
 
 <script>
   let currentSessionId = null;
+  let seenMap = {};  // url -> [{topic, status, session_id, date}] from prior sessions
   let allArticles = [];
   let currentFilter = 'all';
   let currentSort = 'score';
@@ -1784,6 +1810,7 @@
 
   async function openSession(id, topic) {
     currentSessionId = id;
+    seenMap = {};
     document.getElementById('detail-topic').textContent = topic;
     document.getElementById('search-query-input').value = topic;
     document.getElementById('session-list-view').style.display = 'none';
@@ -1804,6 +1831,18 @@
     allArticles = data.articles || [];
     renderStats();
     renderArticles();
+    // Background: check which URLs appeared in other sessions
+    const urls = allArticles.map(a => a.url).filter(Boolean);
+    if (urls.length) {
+      fetch(`/api/research/sessions/${currentSessionId}/seen-check`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urls }),
+      }).then(r => r.json()).then(map => {
+        seenMap = map;
+        renderArticles();  // re-render now that seen data is available
+      }).catch(() => {});
+    }
   }
 
   function renderStats() {
@@ -1902,6 +1941,12 @@
           <div class="article-meta-line">
             <span class="article-source-tag">${escHtml(sourceOf(a))}</span>
             ${fmtDate(a.published_at) ? `<span class="article-date-tag">${escHtml(fmtDate(a.published_at))}</span>` : ''}
+            ${(() => {
+              const seen = seenMap[a.url];
+              if (!seen || !seen.length) return '';
+              const lines = seen.map(s => `${s.status === 'selected' ? '✓' : s.status === 'maybe' ? '?' : '–'} ${escHtml(s.topic)} (${s.date ? new Date(s.date).toLocaleDateString('en-US',{month:'short',year:'numeric'}) : ''})`).join('<br>');
+              return `<span class="seen-dot">↩ ${seen.length} prior<span class="seen-tooltip">${lines}</span></span>`;
+            })()}
           </div>
         </div>
         <div class="article-controls">
@@ -2030,6 +2075,18 @@
       });
     }
     renderStats();
+    // Option 3: surface prior session history when a decision is made
+    if (newStatus !== 'unreviewed') {
+      const url = allArticles.find(a => a.id === id)?.url;
+      const seen = url && seenMap[url];
+      if (seen && seen.length) {
+        const prev = seen.filter(s => s.status === 'selected');
+        if (prev.length) {
+          const topics = prev.map(s => s.topic).join(', ');
+          toast(`Previously selected in: ${topics}`);
+        }
+      }
+    }
   }
 
   async function saveNote(id, textarea) {
