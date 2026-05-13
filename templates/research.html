@@ -1854,8 +1854,12 @@
   }
 
   async function confirmDeleteSession() {
-    if (!confirm(`Delete session "${document.getElementById('detail-topic').textContent}" and all its articles?`)) return;
-    await fetch(`/api/research/sessions/${currentSessionId}`, { method: 'DELETE' });
+    const topic = document.getElementById('detail-topic').textContent;
+    if (!confirm(`Delete session "${topic}" and all its articles? This cannot be undone.`)) return;
+    const pw = prompt('Enter admin password to confirm deletion:');
+    if (pw === null) return;  // cancelled
+    const res = await fetch(`/api/research/sessions/${currentSessionId}?pw=${encodeURIComponent(pw)}`, { method: 'DELETE' });
+    if (res.status === 403) { toast('Incorrect password — session not deleted.', true); return; }
     showListView();
     await loadSessions();
     toast('Session deleted');

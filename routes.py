@@ -21,6 +21,18 @@ from models import Article, RefreshLog, ResearchSession, ResearchArticle, FeedSo
 bp = Blueprint("main", __name__)
 
 
+def require_admin(f):
+    from functools import wraps
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        expected = os.environ.get("ADMIN_PASSWORD", "")
+        pw = request.args.get("pw") or request.headers.get("X-Admin-Key", "")
+        if not expected or pw != expected:
+            return jsonify({"error": "unauthorized"}), 403
+        return f(*args, **kwargs)
+    return decorated
+
+
 @dataclass
 class SearchOptions:
     topic: str
@@ -539,6 +551,7 @@ def get_research_session(session_id):
 
 
 @bp.route("/api/research/sessions/<int:session_id>", methods=["DELETE"])
+@require_admin
 def delete_research_session(session_id):
     session = ResearchSession.query.get_or_404(session_id)
     db.session.delete(session)
@@ -1906,6 +1919,7 @@ def debug_research_articles(session_id):
 
 
 @bp.route("/api/debug/academic")
+@require_admin
 def debug_academic_search():
     """Probe arXiv and OSTI APIs directly — use ?q=your+topic to test."""
     query = request.args.get('q', 'nuclear energy')
@@ -1959,6 +1973,7 @@ def debug_academic_search():
 
 
 @bp.route("/api/debug/env")
+@require_admin
 def debug_env():
     groq = os.environ.get("GROQ_API_KEY", "")
     s2   = os.environ.get("SEMANTIC_SCHOLAR_API_KEY", "").strip()
