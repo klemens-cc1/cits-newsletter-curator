@@ -1300,6 +1300,7 @@
 
   <div class="session-header">
     <div class="session-header-top">
+      <button class="back-btn" onclick="backToSessions()">← Sessions</button>
       <div class="session-header-topic" id="detail-topic"></div>
       <div class="session-actions">
         <button class="btn-outline" onclick="openExportModal()">Export</button>
@@ -1311,12 +1312,13 @@
 
   <div class="search-box">
     <label>Automated Search — collect articles matching this session's topic</label>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+      <input type="text" id="search-query-input" style="flex:1;font-family:'Oswald',sans-serif;font-size:13px;color:var(--charcoal);background:var(--white);border:1px solid var(--border);padding:8px 12px;outline:none;" placeholder="Search query…">
+      <button class="btn-primary" id="search-btn" onclick="startSearch()">Run Search</button>
+      <button class="adv-toggle" id="adv-toggle" onclick="toggleAdvanced()">Options &#9660;</button>
+    </div>
     <div class="search-row">
-      <span class="search-hint">Queries Google News, Yahoo News, GDELT, and specialist RSS feeds automatically.</span>
-      <div style="display:flex;gap:8px;align-items:center">
-        <button class="adv-toggle" id="adv-toggle" onclick="toggleAdvanced()">Options &#9660;</button>
-        <button class="btn-primary" id="search-btn" onclick="startSearch()">Run Search</button>
-      </div>
+      <span class="search-hint">Queries Google News, Yahoo News, GDELT, and specialist RSS feeds automatically. Edit the query above before running.</span>
     </div>
     <div class="adv-options" id="adv-options">
       <div class="adv-row">
@@ -1767,6 +1769,8 @@
 
   // ── Session detail ────────────────────────────────────────────────────────────
 
+  function backToSessions() { showListView(); }
+
   function showListView() {
     document.getElementById('session-list-view').style.display = '';
     document.getElementById('session-detail-view').style.display = 'none';
@@ -1781,6 +1785,7 @@
   async function openSession(id, topic) {
     currentSessionId = id;
     document.getElementById('detail-topic').textContent = topic;
+    document.getElementById('search-query-input').value = topic;
     document.getElementById('session-list-view').style.display = 'none';
     document.getElementById('session-detail-view').style.display = 'block';
     document.getElementById('import-textarea').value = '';
@@ -2654,12 +2659,14 @@
     const checkedTypes = [...document.querySelectorAll('.adv-source-type:checked')].map(el => el.value);
     // Send empty array when all types checked (backend treats empty = no filter)
     const sourceTypes  = checkedTypes.length === allTypeBoxes.length ? [] : checkedTypes;
+    const customQuery  = document.getElementById('search-query-input')?.value.trim() || '';
 
     try {
       const res = await fetch(`/api/research/sessions/${currentSessionId}/search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          query: customQuery,
           date_range: dateRange,
           date_from: dateFrom,
           date_to: dateTo,

@@ -1719,8 +1719,9 @@ def start_research_search(session_id):
     def _terms(raw: str) -> list[str]:
         return [t.strip() for t in raw.split(',') if t.strip()]
 
+    custom_query = (data.get('query') or '').strip()
     opts = SearchOptions(
-        topic=session.topic,
+        topic=custom_query or session.topic,
         date_days=date_map.get(date_range) if not is_custom else None,
         date_from=data.get('date_from', '') if is_custom else '',
         date_to=data.get('date_to', '')     if is_custom else '',
