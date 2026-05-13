@@ -1899,7 +1899,7 @@
       const isOther  = c.label.toLowerCase() === 'other';
       const isActive = c.label === currentCluster;
       return `<button class="cluster-chip${isOther ? ' other' : ''}${isActive ? ' active' : ''}"
-        onclick="setCluster(${JSON.stringify(c.label)})">${escHtml(c.label)}
+        onclick="setCluster(${escHtml(JSON.stringify(c.label))})">${escHtml(c.label)}
         <span style="opacity:0.6;font-size:10px"> ${c.ids.length}</span></button>`;
     }).join('');
     strip.innerHTML = `<span class="cluster-strip-label">Themes</span>${chips}
