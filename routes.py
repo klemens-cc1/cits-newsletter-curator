@@ -565,7 +565,7 @@ def cluster_session(session_id):
 
     lines = []
     for a in articles:
-        desc = (a.description or a.ai_summary or "")[:100].replace("\n", " ")
+        desc = (a.description or "")[:100].replace("\n", " ")
         lines.append(f'[{a.id}] {(a.title or "").strip()}'
                      + (f' | {desc}' if desc else ''))
 
