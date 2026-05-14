@@ -1357,9 +1357,7 @@ def search_yahoo_news(query: str) -> list[dict]:
 
 def search_gdelt(query: str, date_days: int | None = None) -> list[dict]:
     """Query GDELT DOC API for matching articles (up to 50)."""
-    # Prepend sourcelang:english to filter out non-English articles
-    gdelt_query = f'sourcelang:english {query}'
-    encoded = urllib.parse.quote_plus(gdelt_query)
+    encoded = urllib.parse.quote_plus(query)
     url = (
         f"https://api.gdeltproject.org/api/v2/doc/doc"
         f"?query={encoded}&mode=artlist&maxrecords=50&format=json&sort=datedesc"
@@ -1383,7 +1381,11 @@ def search_gdelt(query: str, date_days: int | None = None) -> list[dict]:
                         tzinfo=timezone.utc).isoformat()
                 except Exception:
                     pass
-            if link:
+            if link and title:
+                # Skip non-English articles (CJK/Arabic/etc dominant titles)
+                ascii_ratio = sum(1 for c in title if ord(c) < 256) / len(title)
+                if ascii_ratio < 0.7:
+                    continue
                 results.append({"url": link, "title": title, "source": "gdelt",
                                  "published_at": pub_str})
         return results
@@ -1828,10 +1830,11 @@ def search_federal_register(query: str, date_days: int | None = None) -> list[di
 
 
 def search_crs(query: str, date_days: int | None = None) -> list[dict]:
-    """Search Congressional Research Service reports via the Congress.gov API.
+    """Search congressional bills via the Congress.gov v3 /bill API.
 
-    The /v3/crsreport endpoint does not support keyword search — it only accepts
-    date range filters.  We fetch recent reports and let the scorer handle relevance.
+    /v3/crsreport is not a valid v3 endpoint.  /v3/bill supports full keyword
+    search via q={"query":"..."} and is the best congress.gov source for policy
+    research on a topic.
     """
     key = os.environ.get('CONGRESS_API_KEY', '').strip()
     if not key:
@@ -1840,47 +1843,52 @@ def search_crs(query: str, date_days: int | None = None) -> list[dict]:
         'api_key': key,
         'format': 'json',
         'limit': 20,
+        'q': json.dumps({"query": query}),
+        'sort': 'updateDate+desc',
     }
     if date_days:
-        from_dt = (datetime.now(timezone.utc) - timedelta(days=date_days)).strftime(
-            '%Y-%m-%dT%H:%M:%SZ'
-        )
-        params['fromDateTime'] = from_dt
+        params['fromDateTime'] = (
+            datetime.now(timezone.utc) - timedelta(days=date_days)
+        ).strftime('%Y-%m-%dT%H:%M:%SZ')
+    # Map bill type codes to congress.gov web URL path segments
+    _bill_type_path = {
+        's': 'senate-bill', 'hr': 'house-bill',
+        'sjres': 'senate-joint-resolution', 'hjres': 'house-joint-resolution',
+        'sres': 'senate-simple-resolution', 'hres': 'house-simple-resolution',
+        'sconres': 'senate-concurrent-resolution', 'hconres': 'house-concurrent-resolution',
+    }
     try:
-        resp = req_lib.get(
-            'https://api.congress.gov/v3/crsreport',
-            params=params,
-            timeout=20,
-        )
+        resp = req_lib.get('https://api.congress.gov/v3/bill', params=params, timeout=20)
         resp.raise_for_status()
-        data = resp.json()
-        reports = (data.get('CRSReports') or data.get('crsReports')
-                   or data.get('reports') or [])
+        bills = resp.json().get('bills') or []
         results = []
-        for rep in reports:
-            number = (rep.get('number') or '').strip()
-            if not number:
+        for bill in bills:
+            congress_n = bill.get('congress', '')
+            b_type = (bill.get('type') or '').lower()
+            b_num = bill.get('number', '')
+            if not (congress_n and b_type and b_num):
                 continue
-            url = f'https://crsreports.congress.gov/product/details?code={number}'
-            title_raw = (rep.get('title') or '').strip()
-            description = (rep.get('summary') or '').strip()
+            type_path = _bill_type_path.get(b_type, f'{b_type}-legislation')
+            url = f'https://www.congress.gov/bill/{congress_n}th-congress/{type_path}/{b_num}'
+            title_raw = (bill.get('title') or '').strip()
+            if not title_raw:
+                continue
+            pub_raw = (bill.get('updateDate') or '')[:10]
             pub_str = ''
-            pub_raw = (rep.get('updateDate') or '')[:10]
             if pub_raw:
                 try:
                     pub_str = datetime.strptime(pub_raw, '%Y-%m-%d').replace(
                         tzinfo=timezone.utc).isoformat()
                 except Exception:
                     pass
-            if title_raw:
-                results.append({
-                    'url': url,
-                    'title': title_raw,
-                    'description': description,
-                    'source': 'crs',
-                    'source_name': 'Congressional Research Service',
-                    'published_at': pub_str,
-                })
+            results.append({
+                'url': url,
+                'title': title_raw,
+                'description': '',
+                'source': 'crs',
+                'source_name': 'U.S. Congress',
+                'published_at': pub_str,
+            })
         return results
     except Exception:
         return []
