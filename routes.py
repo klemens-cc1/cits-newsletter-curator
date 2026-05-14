@@ -1357,14 +1357,15 @@ def search_yahoo_news(query: str) -> list[dict]:
 
 def search_gdelt(query: str, date_days: int | None = None) -> list[dict]:
     """Query GDELT DOC API for matching articles (up to 50)."""
-    encoded = urllib.parse.quote(query)
+    encoded = urllib.parse.quote_plus(query)  # use + for spaces (GDELT convention)
     url = (
         f"https://api.gdeltproject.org/api/v2/doc/doc"
-        f"?query={encoded}&mode=artlist&maxrecords=50&format=json"
+        f"?query={encoded}&mode=artlist&maxrecords=50&format=json&sort=datedesc"
     )
     if date_days:
         start = (datetime.now(timezone.utc) - timedelta(days=date_days)).strftime('%Y%m%d%H%M%S')
-        url += f"&startdatetime={start}"
+        end   = datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')
+        url += f"&startdatetime={start}&enddatetime={end}"
     try:
         resp = req_lib.get(url, timeout=25)
         data = resp.json()
@@ -1534,11 +1535,15 @@ def search_semantic_scholar(query: str, date_days: int | None = None,
 
 def search_arxiv(query: str, date_days: int | None = None) -> list[dict]:
     """Search arXiv preprint server via its Atom API."""
-    # Only encode the query text — keep 'all:' literal so arXiv parses it correctly
-    encoded_q = urllib.parse.quote(query)
+    # For multi-word topics: phrase search in title+abstract is more precise than all:
+    if ' ' in query:
+        phrase = urllib.parse.quote(f'"{query}"')
+        arxiv_q = f'ti:{phrase}+OR+abs:{phrase}'
+    else:
+        arxiv_q = f'all:{urllib.parse.quote(query)}'
     url = (
         f"https://export.arxiv.org/api/query"
-        f"?search_query=all:{encoded_q}&start=0&max_results=25&sortBy=relevance"
+        f"?search_query={arxiv_q}&start=0&max_results=25&sortBy=submittedDate&sortOrder=descending"
     )
     try:
         # Fetch with requests for reliable redirect handling, then parse with feedparser
@@ -1825,11 +1830,12 @@ def search_crs(query: str, date_days: int | None = None) -> list[dict]:
     key = os.environ.get('CONGRESS_API_KEY', '').strip()
     if not key:
         return []
+    # congress.gov v3 requires q as a JSON-encoded object, not plain text
     params: dict = {
         'api_key': key,
         'format': 'json',
         'limit': 20,
-        'q': query,
+        'q': json.dumps({"query": query}),
     }
     cutoff_date = ''
     if date_days:
@@ -1925,13 +1931,19 @@ def search_iaea(query: str, date_days: int | None = None) -> list[dict]:
         ('https://www.iaea.org/feeds/news.xml', 'IAEA'),
         ('https://www.iaea.org/feeds/topicfeeds/nuclear-security.xml', 'IAEA Nuclear Security'),
         ('https://www.iaea.org/feeds/topicfeeds/safeguards.xml', 'IAEA Safeguards'),
+        ('https://www.iaea.org/feeds/topicfeeds/nuclear-power.xml', 'IAEA Nuclear Power'),
+        ('https://www.iaea.org/feeds/topicfeeds/climate-change.xml', 'IAEA Climate & Energy'),
     ]
     keywords = [w.lower() for w in query.split() if len(w) > 3]
     cutoff = (datetime.now(timezone.utc) - timedelta(days=date_days)) if date_days else None
     results = []
+    _hdrs = {'User-Agent': 'cits-newsletter-curator/1.0'}
     for feed_url, feed_label in feeds:
         try:
-            parsed = fp_lib.parse(feed_url, agent='cits-newsletter-curator/1.0')
+            # Fetch with requests so we can enforce a hard timeout (feedparser has none)
+            r = req_lib.get(feed_url, timeout=8, headers=_hdrs)
+            r.raise_for_status()
+            parsed = fp_lib.parse(r.content)
             for entry in parsed.entries[:30]:
                 pub_t = getattr(entry, 'published_parsed', None)
                 if cutoff and pub_t:
