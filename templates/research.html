@@ -1287,14 +1287,12 @@
     .phase-chip.active .chip-fill {
       animation: chip-sweep 2.8s ease-in-out forwards;
     }
-    /* Done: solid red fill, white text, red arrow */
+    /* Done: white text, red border/arrow — fill handled by JS inline styles */
     .phase-chip.done {
-      background: var(--red);
       border-color: var(--red);
       color: white;
     }
     .phase-chip.done::after { color: var(--red); }
-    .phase-chip.done .chip-fill { display: none; }
     /* ── Oracle phrase row ── */
     .oracle-status-row {
       display: flex;
@@ -3150,7 +3148,7 @@
     _oracleTimer = setInterval(() => {
       _oracleIdx = (_oracleIdx + 1) % ORACLE_PHRASES.length;
       _setOraclePhrase(ORACLE_PHRASES[_oracleIdx] + '…');
-    }, 2600);
+    }, 5200);
   }
 
   function _stopOracle(finalText) {
@@ -3163,8 +3161,27 @@
   function _resetChips() {
     for (let i = 1; i <= 10; i++) {
       const c = document.getElementById(`phase-${i}`);
-      if (c) c.className = 'phase-chip';
+      if (!c) continue;
+      c.className = 'phase-chip';
+      const fill = c.querySelector('.chip-fill');
+      if (fill) { fill.removeAttribute('style'); }
     }
+  }
+
+  function _chipToDone(c) {
+    if (!c || c.classList.contains('done')) return;
+    const fill = c.querySelector('.chip-fill');
+    if (fill) {
+      // Freeze the sweep animation at its current visual position
+      const matrix = getComputedStyle(fill).transform;
+      fill.style.animation = 'none';
+      fill.style.transform = (matrix && matrix !== 'none') ? matrix : 'scaleX(0)';
+      void fill.offsetHeight; // force reflow so transition picks up from frozen position
+      fill.style.transition = 'transform 0.4s ease-out, background 0.4s ease-out';
+      fill.style.transform  = 'scaleX(1)';
+      fill.style.background = 'var(--red)';
+    }
+    c.className = 'phase-chip done';
   }
 
   function _updateChips(phaseNum) {
@@ -3172,14 +3189,17 @@
       const c = document.getElementById(`phase-${i}`);
       if (!c) continue;
       if (i < phaseNum) {
-        c.className = 'phase-chip done';
+        _chipToDone(c);
       } else if (i === phaseNum) {
         if (!c.classList.contains('active')) {
           c.className = 'phase-chip active';
           const fill = c.querySelector('.chip-fill');
-          if (fill) { fill.style.animation = 'none'; void fill.offsetHeight; fill.style.animation = ''; }
+          if (fill) {
+            fill.removeAttribute('style');
+            void fill.offsetHeight;
+          }
         }
-      } else {
+      } else if (!c.classList.contains('done')) {
         c.className = 'phase-chip';
       }
     }
@@ -3187,8 +3207,7 @@
 
   function _completeChips() {
     for (let i = 1; i <= 10; i++) {
-      const c = document.getElementById(`phase-${i}`);
-      if (c) c.className = 'phase-chip done';
+      _chipToDone(document.getElementById(`phase-${i}`));
     }
   }
 
