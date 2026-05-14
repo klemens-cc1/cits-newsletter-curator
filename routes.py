@@ -631,6 +631,110 @@ Rules:
         return jsonify({"error": "Clustering failed — try again"}), 500
 
 
+# ── Find citing papers ────────────────────────────────────────────────────────
+
+@bp.route("/api/research/sessions/<int:session_id>/find-citing", methods=["POST"])
+def find_citing_papers(session_id):
+    """Use OpenAlex to find papers citing the given URL, import into session."""
+    ResearchSession.query.get_or_404(session_id)
+    data = request.get_json() or {}
+    input_url = (data.get('url') or '').strip()
+    if not input_url:
+        return jsonify({'error': 'url required'}), 400
+
+    # Step 1: Resolve to OpenAlex work ID
+    openalex_id = None
+    try:
+        # Try DOI lookup first
+        doi = None
+        if 'doi.org/' in input_url:
+            doi = input_url.split('doi.org/')[-1].strip('/')
+
+        if doi:
+            r = req_lib.get(f'https://api.openalex.org/works/https://doi.org/{urllib.parse.quote(doi)}',
+                            timeout=10, headers={'User-Agent': 'cits-newsletter-curator/1.0'})
+            if r.status_code == 200:
+                openalex_id = r.json().get('id', '').split('/')[-1]
+
+        if not openalex_id and 'arxiv.org/abs/' in input_url:
+            arxiv_id = input_url.split('/abs/')[-1].strip()
+            r = req_lib.get(f'https://api.openalex.org/works/https://arxiv.org/abs/{arxiv_id}',
+                            timeout=10, headers={'User-Agent': 'cits-newsletter-curator/1.0'})
+            if r.status_code == 200:
+                openalex_id = r.json().get('id', '').split('/')[-1]
+    except Exception:
+        pass
+
+    if not openalex_id:
+        return jsonify({'imported': 0, 'message': 'Could not resolve this article in OpenAlex — DOI or arXiv URL required'}), 200
+
+    # Step 2: Fetch citing papers
+    citing = []
+    try:
+        params = {
+            'filter': f'cites:{openalex_id}',
+            'per-page': 25,
+            'select': 'id,title,abstract_inverted_index,publication_date,primary_location,doi',
+            'mailto': os.environ.get('CONTACT_EMAIL', ''),
+        }
+        r = req_lib.get('https://api.openalex.org/works', params=params, timeout=15,
+                        headers={'User-Agent': 'cits-newsletter-curator/1.0'})
+        if r.status_code == 200:
+            for work in r.json().get('results', []):
+                inv = work.get('abstract_inverted_index') or {}
+                abstract = ''
+                if inv:
+                    wm: dict[int, str] = {}
+                    for word, positions in inv.items():
+                        for pos in positions:
+                            wm[pos] = word
+                    abstract = ' '.join(wm[i] for i in sorted(wm))[:500]
+                w_doi = (work.get('doi') or '').replace('https://doi.org/', '')
+                w_url = (f'https://doi.org/{w_doi}' if w_doi else
+                         ((work.get('primary_location') or {}).get('landing_page_url') or '') or
+                         work.get('id', ''))
+                if w_url and w_url.startswith('http'):
+                    citing.append({
+                        'url': w_url,
+                        'title': work.get('title') or '',
+                        'description': abstract,
+                        'source_name': ((work.get('primary_location') or {}).get('source') or {}).get('display_name') or 'OpenAlex',
+                        'published_at': work.get('publication_date') or '',
+                    })
+    except Exception as e:
+        log.warning(f'find-citing error: {e}')
+
+    if not citing:
+        return jsonify({'imported': 0, 'message': 'No citing papers found in OpenAlex'}), 200
+
+    # Step 3: Import into session (skip existing URLs)
+    existing_urls = {a.url for a in ResearchArticle.query.filter_by(session_id=session_id).all()}
+    imported = 0
+    for c in citing:
+        if c['url'] in existing_urls:
+            continue
+        pub_dt = None
+        if c['published_at']:
+            try:
+                pub_dt = datetime.strptime(c['published_at'][:10], '%Y-%m-%d').replace(tzinfo=timezone.utc)
+            except Exception:
+                pass
+        db.session.add(ResearchArticle(
+            session_id=session_id,
+            url=c['url'],
+            title=c['title'] or c['url'],
+            description=c['description'],
+            relevance_score=5,
+            published_at=pub_dt,
+            source_name=c['source_name'] or None,
+            source_domain=_domain_from_url(c['url']) or None,
+            status='unreviewed',
+        ))
+        imported += 1
+    db.session.commit()
+    return jsonify({'imported': imported, 'message': f'Imported {imported} citing papers from OpenAlex'})
+
+
 # ── Research history / seen-check ─────────────────────────────────────────────
 
 @bp.route("/api/research/sessions/<int:session_id>/seen-check", methods=["POST"])
@@ -1546,6 +1650,352 @@ def search_osti(query: str, date_days: int | None = None,
         return []
 
 
+def search_openalex(query: str, date_days: int | None = None,
+                    date_from: str = "", date_to: str = "") -> list[dict]:
+    """Search OpenAlex (200M+ scholarly works) via their REST API."""
+    params: dict = {
+        'search': query,
+        'per-page': 20,
+        'mailto': os.environ.get('CONTACT_EMAIL', ''),
+        'select': 'id,title,abstract_inverted_index,publication_date,primary_location,doi',
+    }
+    if date_from:
+        f_filter = f'from_publication_date:{date_from[:10]}'
+        if date_to:
+            f_filter += f',to_publication_date:{date_to[:10]}'
+        params['filter'] = f_filter
+    elif date_days:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=date_days)).strftime('%Y-%m-%d')
+        params['filter'] = f'from_publication_date:{cutoff}'
+    try:
+        resp = req_lib.get(
+            'https://api.openalex.org/works',
+            params=params,
+            timeout=20,
+            headers={'User-Agent': 'cits-newsletter-curator/1.0'},
+        )
+        resp.raise_for_status()
+        results = []
+        for work in resp.json().get('results', []):
+            inv = work.get('abstract_inverted_index') or {}
+            abstract = ''
+            if inv:
+                wm: dict[int, str] = {}
+                for word, positions in inv.items():
+                    for pos in positions:
+                        wm[pos] = word
+                abstract = ' '.join(wm[i] for i in sorted(wm))[:500]
+            doi = (work.get('doi') or '').replace('https://doi.org/', '').strip()
+            primary_loc = work.get('primary_location') or {}
+            if doi:
+                url = f'https://doi.org/{doi}'
+            elif primary_loc.get('landing_page_url'):
+                url = primary_loc['landing_page_url']
+            else:
+                url = work.get('id', '')
+            if not url or not url.startswith('http'):
+                continue
+            sn = (primary_loc.get('source') or {}).get('display_name') or 'OpenAlex'
+            title_raw = (work.get('title') or '').strip()
+            if title_raw:
+                results.append({
+                    'url': url,
+                    'title': title_raw,
+                    'description': abstract,
+                    'source': 'openalex',
+                    'source_name': sn,
+                    'published_at': work.get('publication_date') or '',
+                })
+        return results
+    except Exception:
+        return []
+
+
+def search_guardian(query: str, date_days: int | None = None,
+                    date_from: str = "", date_to: str = "") -> list[dict]:
+    """Search The Guardian's Content API for matching articles."""
+    key = os.environ.get('GUARDIAN_API_KEY', '').strip()
+    if not key:
+        return []
+    params: dict = {
+        'q': query,
+        'api-key': key,
+        'show-fields': 'trailText',
+        'page-size': 20,
+        'order-by': 'relevance',
+    }
+    if date_from:
+        params['from-date'] = date_from[:10]
+        if date_to:
+            params['to-date'] = date_to[:10]
+    elif date_days:
+        params['from-date'] = (
+            datetime.now(timezone.utc) - timedelta(days=date_days)
+        ).strftime('%Y-%m-%d')
+    try:
+        resp = req_lib.get(
+            'https://content.guardianapis.com/search',
+            params=params,
+            timeout=15,
+        )
+        resp.raise_for_status()
+        results = []
+        for item in resp.json().get('response', {}).get('results', []):
+            url = item.get('webUrl', '')
+            if not url:
+                continue
+            title_raw = (item.get('webTitle') or '').strip()
+            trail = (item.get('fields') or {}).get('trailText') or ''
+            description = re.sub(r'<[^>]+>', '', trail).strip()
+            pub_str = ''
+            pub_raw = item.get('webPublicationDate') or ''
+            if pub_raw:
+                try:
+                    pub_str = datetime.fromisoformat(
+                        pub_raw.replace('Z', '+00:00')
+                    ).isoformat()
+                except Exception:
+                    pass
+            if title_raw:
+                results.append({
+                    'url': url,
+                    'title': title_raw,
+                    'description': description,
+                    'source': 'guardian',
+                    'source_name': 'The Guardian',
+                    'published_at': pub_str,
+                })
+        return results
+    except Exception:
+        return []
+
+
+def search_federal_register(query: str, date_days: int | None = None) -> list[dict]:
+    """Search Federal Register documents via their public JSON API."""
+    params: dict = {
+        'conditions[term]': query,
+        'per_page': 20,
+        'order': 'relevance',
+    }
+    if date_days:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=date_days)).strftime('%m/%d/%Y')
+        params['conditions[publication_date][gte]'] = cutoff
+    try:
+        resp = req_lib.get(
+            'https://www.federalregister.gov/api/v1/articles.json',
+            params=params,
+            timeout=20,
+        )
+        resp.raise_for_status()
+        results = []
+        for item in resp.json().get('results', []):
+            url = item.get('html_url', '') or item.get('pdf_url', '')
+            if not url:
+                continue
+            title_raw = (item.get('title') or '').strip()
+            description = (item.get('abstract') or '').strip()
+            agencies = ', '.join(
+                a.get('name', '') for a in (item.get('agencies') or []) if a.get('name')
+            )
+            sn = f'Federal Register — {agencies}' if agencies else 'Federal Register'
+            pub_str = ''
+            pub_raw = item.get('publication_date') or ''
+            if pub_raw:
+                try:
+                    pub_str = datetime.strptime(pub_raw[:10], '%Y-%m-%d').replace(
+                        tzinfo=timezone.utc).isoformat()
+                except Exception:
+                    pass
+            if title_raw:
+                results.append({
+                    'url': url,
+                    'title': title_raw,
+                    'description': description,
+                    'source': 'federal_register',
+                    'source_name': sn,
+                    'published_at': pub_str,
+                })
+        return results
+    except Exception:
+        return []
+
+
+def search_crs(query: str, date_days: int | None = None) -> list[dict]:
+    """Search Congressional Research Service reports via the Congress.gov API."""
+    key = os.environ.get('CONGRESS_API_KEY', '').strip()
+    if not key:
+        return []
+    params: dict = {
+        'api_key': key,
+        'format': 'json',
+        'limit': 20,
+        'q': query,
+    }
+    cutoff_date = ''
+    if date_days:
+        cutoff_date = (datetime.now(timezone.utc) - timedelta(days=date_days)).strftime('%Y-%m-%d')
+    try:
+        resp = req_lib.get(
+            'https://api.congress.gov/v3/crsreport',
+            params=params,
+            timeout=20,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        reports = data.get('CRSReports') or data.get('reports') or []
+        results = []
+        for rep in reports:
+            number = (rep.get('number') or '').strip()
+            if not number:
+                continue
+            if cutoff_date:
+                update_date = (rep.get('updateDate') or '')[:10]
+                if update_date and update_date < cutoff_date:
+                    continue
+            url = f'https://crsreports.congress.gov/product/details?code={number}'
+            title_raw = (rep.get('title') or '').strip()
+            description = (rep.get('summary') or '').strip()
+            pub_str = ''
+            pub_raw = (rep.get('updateDate') or '')[:10]
+            if pub_raw:
+                try:
+                    pub_str = datetime.strptime(pub_raw, '%Y-%m-%d').replace(
+                        tzinfo=timezone.utc).isoformat()
+                except Exception:
+                    pass
+            if title_raw:
+                results.append({
+                    'url': url,
+                    'title': title_raw,
+                    'description': description,
+                    'source': 'crs',
+                    'source_name': 'Congressional Research Service',
+                    'published_at': pub_str,
+                })
+        return results
+    except Exception:
+        return []
+
+
+def search_core(query: str, date_days: int | None = None) -> list[dict]:
+    """Search CORE (open-access research aggregator) via their v3 API."""
+    key = os.environ.get('CORE_API_KEY', '').strip()
+    if not key:
+        return []
+    cutoff_year = None
+    if date_days:
+        cutoff_year = (datetime.now(timezone.utc) - timedelta(days=date_days)).year
+    try:
+        resp = req_lib.post(
+            'https://api.core.ac.uk/v3/search/works',
+            headers={'Authorization': f'Bearer {key}', 'Content-Type': 'application/json'},
+            json={'q': query, 'limit': 15},
+            timeout=20,
+        )
+        resp.raise_for_status()
+        results = []
+        for work in resp.json().get('results', []):
+            urls_list = work.get('sourceFulltextUrls') or []
+            url = work.get('downloadUrl') or (urls_list[0] if urls_list else None)
+            if not url or not str(url).startswith('http'):
+                continue
+            year = work.get('yearPublished')
+            if cutoff_year and year and int(year) < cutoff_year:
+                continue
+            title_raw = (work.get('title') or '').strip()
+            description = re.sub(r'\s+', ' ', (work.get('abstract') or '').strip())[:500]
+            pub_str = f'{year}-01-01T00:00:00+00:00' if year else ''
+            if title_raw:
+                results.append({
+                    'url': url,
+                    'title': title_raw,
+                    'description': description,
+                    'source': 'core',
+                    'source_name': 'CORE',
+                    'published_at': pub_str,
+                })
+        return results
+    except Exception:
+        return []
+
+
+def search_iaea(query: str, date_days: int | None = None) -> list[dict]:
+    """Search IAEA RSS feeds for matching news and topic articles."""
+    feeds = [
+        ('https://www.iaea.org/feeds/news.xml', 'IAEA'),
+        ('https://www.iaea.org/feeds/topicfeeds/nuclear-security.xml', 'IAEA Nuclear Security'),
+        ('https://www.iaea.org/feeds/topicfeeds/safeguards.xml', 'IAEA Safeguards'),
+    ]
+    keywords = [w.lower() for w in query.split() if len(w) > 3]
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=date_days)) if date_days else None
+    results = []
+    for feed_url, feed_label in feeds:
+        try:
+            parsed = fp_lib.parse(feed_url, agent='cits-newsletter-curator/1.0')
+            for entry in parsed.entries[:30]:
+                pub_t = getattr(entry, 'published_parsed', None)
+                if cutoff and pub_t:
+                    if datetime(*pub_t[:6], tzinfo=timezone.utc) < cutoff:
+                        continue
+                title = getattr(entry, 'title', '') or ''
+                summary_raw = getattr(entry, 'summary', '') or ''
+                summary = re.sub(r'<[^>]+>', '', summary_raw).strip()
+                combined = (title + ' ' + summary).lower()
+                if keywords and not any(kw in combined for kw in keywords):
+                    continue
+                link = getattr(entry, 'link', '') or ''
+                if link:
+                    results.append({
+                        'url': link,
+                        'title': title,
+                        'description': summary[:500],
+                        'source': 'iaea',
+                        'source_name': feed_label,
+                        'published_at': _pub_str(pub_t),
+                    })
+        except Exception:
+            continue
+    return results
+
+
+def search_eia(query: str, date_days: int | None = None) -> list[dict]:
+    """Search EIA RSS feeds for matching energy news and reports."""
+    feeds = [
+        ('https://www.eia.gov/rss/todayinenergy.xml', 'EIA Today in Energy'),
+        ('https://www.eia.gov/rss/news.xml', 'EIA News'),
+    ]
+    keywords = [w.lower() for w in query.split() if len(w) > 3]
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=date_days)) if date_days else None
+    results = []
+    for feed_url, feed_label in feeds:
+        try:
+            parsed = fp_lib.parse(feed_url, agent='cits-newsletter-curator/1.0')
+            for entry in parsed.entries[:30]:
+                pub_t = getattr(entry, 'published_parsed', None)
+                if cutoff and pub_t:
+                    if datetime(*pub_t[:6], tzinfo=timezone.utc) < cutoff:
+                        continue
+                title = getattr(entry, 'title', '') or ''
+                summary_raw = getattr(entry, 'summary', '') or ''
+                summary = re.sub(r'<[^>]+>', '', summary_raw).strip()
+                combined = (title + ' ' + summary).lower()
+                if keywords and not any(kw in combined for kw in keywords):
+                    continue
+                link = getattr(entry, 'link', '') or ''
+                if link:
+                    results.append({
+                        'url': link,
+                        'title': title,
+                        'description': summary[:500],
+                        'source': 'eia',
+                        'source_name': feed_label,
+                        'published_at': _pub_str(pub_t),
+                    })
+        except Exception:
+            continue
+    return results
+
+
 def _import_single_article(
     session_id: int, url: str, title: str, topic: str, seen_urls: set,
     min_score: int = 1, published_at: str = "", source_name: str = "",
@@ -1751,15 +2201,31 @@ def run_research_search(app, job_id: int, session_id: int, topic: str, opts: Sea
             update_job(5, "Scanning specialist RSS feeds…")
             all_candidates.extend(search_feeds_by_topic(topic, keywords, eff_days))
 
-            # Phase 6 — Semantic Scholar (supports full date_from/date_to range)
-            update_job(6, "Searching Semantic Scholar…")
+            # Phase 6 — Academic: Semantic Scholar + arXiv
+            update_job(6, "Searching Semantic Scholar + arXiv…")
             for q in queries[:2]:
                 all_candidates.extend(search_semantic_scholar(
                     q, eff_days, opts.date_from, opts.date_to))
+            all_candidates.extend(search_arxiv(topic, eff_days))
 
-            # Phase 7 — OSTI (supports full date_from/date_to range)
-            update_job(7, "Searching OSTI.gov (DOE research)…")
+            # Phase 7 — Academic: OpenAlex + CORE
+            update_job(7, "Searching OpenAlex + CORE…")
+            all_candidates.extend(search_openalex(topic, eff_days, opts.date_from, opts.date_to))
+            for q in queries[:2]:
+                all_candidates.extend(search_openalex(q, eff_days, opts.date_from, opts.date_to))
+            all_candidates.extend(search_core(topic, eff_days))
+
+            # Phase 8 — Government: OSTI + Federal Register
+            update_job(8, "Searching OSTI.gov + Federal Register…")
             all_candidates.extend(search_osti(topic, eff_days, opts.date_from, opts.date_to))
+            all_candidates.extend(search_federal_register(topic, eff_days))
+
+            # Phase 9 — News & Policy: Guardian + CRS + IAEA + EIA
+            update_job(9, "Searching Guardian, CRS, IAEA, EIA…")
+            all_candidates.extend(search_guardian(topic, eff_days, opts.date_from, opts.date_to))
+            all_candidates.extend(search_crs(topic, eff_days))
+            all_candidates.extend(search_iaea(topic, eff_days))
+            all_candidates.extend(search_eia(topic, eff_days))
 
             # Deduplicate
             seen: set[str] = set()
@@ -1770,10 +2236,10 @@ def run_research_search(app, job_id: int, session_id: int, topic: str, opts: Sea
                     seen.add(url)
                     unique_candidates.append(c)
 
-            update_job(7, "Searching OSTI.gov (DOE research)…", urls_found=len(unique_candidates))
+            update_job(9, "Searching Guardian, CRS, IAEA, EIA…", urls_found=len(unique_candidates))
 
-            # Phase 8 — Score and import (filtered by min_score, capped at max_results)
-            update_job(8, f"Scoring {len(unique_candidates)} articles…",
+            # Phase 10 — Score and import (filtered by min_score, capped at max_results)
+            update_job(10, f"Scoring {len(unique_candidates)} articles…",
                        urls_found=len(unique_candidates))
 
             # Build feed→type cache once so Phase 6 doesn't hit the DB per article
@@ -1799,10 +2265,14 @@ def run_research_search(app, job_id: int, session_id: int, topic: str, opts: Sea
                     # Source type filter
                     if opts.source_types:
                         src = candidate.get('source', '')
-                        if src in ('google_news', 'yahoo_news', 'gdelt'):
+                        if src in ('google_news', 'yahoo_news', 'gdelt', 'guardian', 'crs'):
                             stype = 'news'
-                        elif src in ('arxiv', 'osti', 'semantic_scholar'):
+                        elif src in ('arxiv', 'osti', 'semantic_scholar', 'openalex', 'core'):
                             stype = 'academic'
+                        elif src in ('federal_register', 'eia'):
+                            stype = 'government'
+                        elif src == 'iaea':
+                            stype = 'government'
                         elif src.startswith('feed:'):
                             stype = feed_type_cache.get(src[5:], 'news')
                         else:
@@ -1831,7 +2301,7 @@ def run_research_search(app, job_id: int, session_id: int, topic: str, opts: Sea
                         db.session.commit()
                         job = ResearchJob.query.get(job_id)
                         if job:
-                            job.phase_num = 8
+                            job.phase_num = 10
                             job.phase = f"Scoring articles… ({i}/{len(unique_candidates)})"
                             db.session.commit()
                 except Exception:
@@ -1867,7 +2337,7 @@ def start_research_search(session_id):
         status="pending",
         phase="Starting…",
         phase_num=0,
-        total_phases=8,
+        total_phases=10,
         urls_found=0,
     )
     db.session.add(job)
