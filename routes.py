@@ -2481,11 +2481,82 @@ def debug_academic_search():
 @bp.route("/api/debug/env")
 @require_admin
 def debug_env():
-    groq = os.environ.get("GROQ_API_KEY", "")
-    s2   = os.environ.get("SEMANTIC_SCHOLAR_API_KEY", "").strip()
+    def _key(name):
+        v = os.environ.get(name, "").strip()
+        return {"set": bool(v), "prefix": v[:8] if v else "NOT SET"}
     return jsonify({
-        "groq_key_set":    bool(groq),
-        "groq_key_prefix": groq[:8] if groq else "NOT SET",
-        "s2_key_set":      bool(s2),
-        "s2_key_prefix":   s2[:8] if s2 else "NOT SET",
+        "groq":            _key("GROQ_API_KEY"),
+        "semantic_scholar": _key("SEMANTIC_SCHOLAR_API_KEY"),
+        "guardian":        _key("GUARDIAN_API_KEY"),
+        "congress":        _key("CONGRESS_API_KEY"),
+        "core":            _key("CORE_API_KEY"),
+        "eia_note":        "EIA and IAEA use RSS feeds — no key required",
     })
+
+
+@bp.route("/api/debug/sources")
+@require_admin
+def debug_sources():
+    """
+    Test every research source with a short query.
+    Runs all probes in parallel. Add ?q= to change the test query.
+    Example: /api/debug/sources?q=energy+security&pw=<ADMIN_PASSWORD>
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import time
+
+    query = request.args.get('q', 'energy security').strip()
+    days  = request.args.get('days', 30, type=int)
+
+    def _probe(label, fn, *args, **kwargs):
+        t0 = time.monotonic()
+        try:
+            results = fn(*args, **kwargs)
+            elapsed = round((time.monotonic() - t0) * 1000)
+            sample = results[0].get('title', '')[:80] if results else None
+            return label, {
+                'count': len(results),
+                'sample': sample,
+                'latency_ms': elapsed,
+                'ok': True,
+            }
+        except Exception as exc:
+            elapsed = round((time.monotonic() - t0) * 1000)
+            return label, {'ok': False, 'error': str(exc), 'latency_ms': elapsed}
+
+    probes = [
+        ('openalex',          search_openalex,          query, days),
+        ('arxiv',             search_arxiv,              query, days),
+        ('core',              search_core,               query, days),
+        ('semantic_scholar',  search_semantic_scholar,   query, days),
+        ('osti',              search_osti,               query, days),
+        ('federal_register',  search_federal_register,   query, days),
+        ('guardian',          search_guardian,           query, days),
+        ('crs',               search_crs,                query, days),
+        ('iaea',              search_iaea,               query, days),
+        ('eia',               search_eia,                query, days),
+        ('google_news',       search_google_news,        query, days),
+        ('gdelt',             search_gdelt,              query, days),
+    ]
+
+    # Keys that are optional — show whether they are configured
+    key_status = {
+        'guardian':         bool(os.environ.get('GUARDIAN_API_KEY', '').strip()),
+        'crs':              bool(os.environ.get('CONGRESS_API_KEY', '').strip()),
+        'core':             bool(os.environ.get('CORE_API_KEY', '').strip()),
+        'semantic_scholar': bool(os.environ.get('SEMANTIC_SCHOLAR_API_KEY', '').strip()),
+    }
+
+    results_map = {}
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        futures = {pool.submit(_probe, label, fn, *args): label
+                   for label, fn, *args in probes}
+        for future in as_completed(futures):
+            label, info = future.result()
+            if label in key_status:
+                info['key_set'] = key_status[label]
+            results_map[label] = info
+
+    # Sort: failing sources first so problems are obvious at the top
+    ordered = dict(sorted(results_map.items(), key=lambda kv: (kv[1].get('ok', False), kv[0])))
+    return jsonify({'query': query, 'days': days, 'sources': ordered})
