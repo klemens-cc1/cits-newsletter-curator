@@ -1228,31 +1228,73 @@
       padding-top: 16px;
       border-top: 1px solid var(--border);
     }
-    /* ── Oracle progress bar ── */
-    .oracle-bar-wrap {
+    /* ── Oracle tracker (pizza-tracker chips) ── */
+    .oracle-tracker {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0;
+      margin-bottom: 12px;
+    }
+    .phase-chip {
       position: relative;
-      height: 2px;
-      background: #ececec;
-      margin-bottom: 14px;
-      overflow: hidden;
+      font-family: 'Oswald', sans-serif;
+      font-size: 9px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 4px 9px;
+      border: 1px solid #e8e8e8;
+      color: #c0c0c0;
+      background: #fafafa;
+      white-space: nowrap;
+      transition: border-color 0.25s, color 0.25s, background 0.25s;
+      margin-right: 14px; /* room for the › arrow */
     }
-    @keyframes oracle-bar-shimmer {
-      0%   { background-position: 200% 0; }
-      100% { background-position: -200% 0; }
-    }
-    .oracle-bar-fill {
+    /* › arrow connector via ::after — sits outside the chip so no overflow:hidden needed */
+    .phase-chip:not(:last-child)::after {
+      content: '›';
       position: absolute;
-      left: 0; top: 0; height: 100%;
-      width: 0%;
-      background: linear-gradient(90deg, var(--red) 0%, #e8193a 45%, var(--red) 100%);
-      background-size: 400% 100%;
-      animation: oracle-bar-shimmer 2.2s linear infinite;
-      transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+      right: -11px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 11px;
+      color: #d8d8d8;
+      pointer-events: none;
+      transition: color 0.25s;
     }
-    .oracle-bar-fill.complete {
-      animation: none;
+    .phase-chip:last-child { margin-right: 0; }
+    /* Inner fill sweep */
+    .chip-fill {
+      position: absolute;
+      inset: 0;
+      background: rgba(186,12,47,0.09);
+      transform-origin: left center;
+      transform: scaleX(0);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .chip-label { position: relative; z-index: 1; }
+    /* Active: red border + text, fill sweeps in */
+    .phase-chip.active {
+      border-color: var(--red);
+      color: var(--red);
+    }
+    .phase-chip.active::after { color: var(--red); }
+    @keyframes chip-sweep {
+      from { transform: scaleX(0); }
+      to   { transform: scaleX(1); }
+    }
+    .phase-chip.active .chip-fill {
+      animation: chip-sweep 2.8s ease-in-out forwards;
+    }
+    /* Done: solid red fill, white text, red arrow */
+    .phase-chip.done {
       background: var(--red);
+      border-color: var(--red);
+      color: white;
     }
+    .phase-chip.done::after { color: var(--red); }
+    .phase-chip.done .chip-fill { display: none; }
     /* ── Oracle phrase row ── */
     .oracle-status-row {
       display: flex;
@@ -1526,8 +1568,17 @@
       </div>
     </div>
     <div class="search-progress" id="search-progress" style="display:none">
-      <div class="oracle-bar-wrap">
-        <div class="oracle-bar-fill" id="oracle-bar-fill"></div>
+      <div class="oracle-tracker">
+        <div class="phase-chip" id="phase-1"><span class="chip-fill"></span><span class="chip-label">Queries</span></div>
+        <div class="phase-chip" id="phase-2"><span class="chip-fill"></span><span class="chip-label">Google</span></div>
+        <div class="phase-chip" id="phase-3"><span class="chip-fill"></span><span class="chip-label">Yahoo</span></div>
+        <div class="phase-chip" id="phase-4"><span class="chip-fill"></span><span class="chip-label">GDELT</span></div>
+        <div class="phase-chip" id="phase-5"><span class="chip-fill"></span><span class="chip-label">RSS</span></div>
+        <div class="phase-chip" id="phase-6"><span class="chip-fill"></span><span class="chip-label">S2 · arXiv</span></div>
+        <div class="phase-chip" id="phase-7"><span class="chip-fill"></span><span class="chip-label">OpenAlex</span></div>
+        <div class="phase-chip" id="phase-8"><span class="chip-fill"></span><span class="chip-label">Gov</span></div>
+        <div class="phase-chip" id="phase-9"><span class="chip-fill"></span><span class="chip-label">News &amp; Policy</span></div>
+        <div class="phase-chip" id="phase-10"><span class="chip-fill"></span><span class="chip-label">Score</span></div>
       </div>
       <div class="oracle-status-row">
         <span class="oracle-spark" id="oracle-spark">✦</span>
@@ -2940,6 +2991,38 @@
     if (spark) spark.className = 'oracle-spark idle';
   }
 
+  function _resetChips() {
+    for (let i = 1; i <= 10; i++) {
+      const c = document.getElementById(`phase-${i}`);
+      if (c) c.className = 'phase-chip';
+    }
+  }
+
+  function _updateChips(phaseNum) {
+    for (let i = 1; i <= 10; i++) {
+      const c = document.getElementById(`phase-${i}`);
+      if (!c) continue;
+      if (i < phaseNum) {
+        c.className = 'phase-chip done';
+      } else if (i === phaseNum) {
+        if (!c.classList.contains('active')) {
+          c.className = 'phase-chip active';
+          const fill = c.querySelector('.chip-fill');
+          if (fill) { fill.style.animation = 'none'; void fill.offsetHeight; fill.style.animation = ''; }
+        }
+      } else {
+        c.className = 'phase-chip';
+      }
+    }
+  }
+
+  function _completeChips() {
+    for (let i = 1; i <= 10; i++) {
+      const c = document.getElementById(`phase-${i}`);
+      if (c) c.className = 'phase-chip done';
+    }
+  }
+
   function toggleCustomDate(val) {
     const box = document.getElementById('adv-custom-date');
     box.style.display = val === 'custom' ? '' : 'none';
@@ -2959,11 +3042,9 @@
     document.getElementById('search-progress').style.display = '';
     document.getElementById('search-found').textContent = '';
     document.getElementById('oracle-phase-label').textContent = '';
-    const barFill = document.getElementById('oracle-bar-fill');
-    barFill.className = 'oracle-bar-fill';
-    barFill.style.width = '0%';
     const spark = document.getElementById('oracle-spark');
     if (spark) spark.className = 'oracle-spark';
+    _resetChips();
     _stopOracle();
     _startOracle();
 
@@ -3018,10 +3099,7 @@
       const res = await fetch(`/api/research/jobs/${searchJobId}/status`);
       const job = await res.json();
 
-      // Progress bar — phase_num out of 10 total phases
-      const totalPhases = job.total_phases || 10;
-      const pct = job.phase_num > 0 ? Math.min(95, Math.round((job.phase_num / totalPhases) * 100)) : 5;
-      document.getElementById('oracle-bar-fill').style.width = pct + '%';
+      _updateChips(job.phase_num || 0);
       document.getElementById('oracle-phase-label').textContent = job.phase || '';
       if (job.urls_found > 0) {
         document.getElementById('search-found').textContent = `${job.urls_found} found`;
@@ -3030,9 +3108,7 @@
       if (job.status === 'done') {
         clearInterval(searchPoller); searchPoller = null;
         document.getElementById('search-btn').disabled = false;
-        const barFill = document.getElementById('oracle-bar-fill');
-        barFill.style.width = '100%';
-        barFill.className = 'oracle-bar-fill complete';
+        _completeChips();
         if (job.urls_found === 0) {
           _stopOracle('Nothing surfaced — try broadening your search');
           document.getElementById('oracle-phase-label').textContent = '';
