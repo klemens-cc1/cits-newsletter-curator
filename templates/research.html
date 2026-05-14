@@ -1228,49 +1228,76 @@
       padding-top: 16px;
       border-top: 1px solid var(--border);
     }
-    .search-phases {
-      display: flex;
-      gap: 4px;
-      flex-wrap: wrap;
-      margin-bottom: 10px;
+    /* ── Oracle progress bar ── */
+    .oracle-bar-wrap {
+      position: relative;
+      height: 2px;
+      background: #ececec;
+      margin-bottom: 14px;
+      overflow: hidden;
     }
-    .phase-step {
-      font-family: 'Oswald', sans-serif;
-      font-size: 10px;
-      letter-spacing: 0.8px;
-      text-transform: uppercase;
-      padding: 4px 9px;
-      border: 1px solid #e8e8e8;
-      color: #bbb;
-      background: #fafafa;
-      transition: all 0.2s;
+    @keyframes oracle-bar-shimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
     }
-    .phase-step.active {
-      border-color: var(--red);
-      color: var(--red);
-      background: rgba(186,12,47,0.04);
+    .oracle-bar-fill {
+      position: absolute;
+      left: 0; top: 0; height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--red) 0%, #e8193a 45%, var(--red) 100%);
+      background-size: 400% 100%;
+      animation: oracle-bar-shimmer 2.2s linear infinite;
+      transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
     }
-    .phase-step.done {
-      border-color: #c8dfc8;
-      color: #5a9a5a;
-      background: #f4fbf4;
+    .oracle-bar-fill.complete {
+      animation: none;
+      background: var(--red);
     }
-    .search-status-row {
+    /* ── Oracle phrase row ── */
+    .oracle-status-row {
       display: flex;
       align-items: center;
-      gap: 16px;
+      gap: 9px;
     }
-    .search-status-text {
+    @keyframes spark-pulse {
+      0%, 100% { opacity: 1;   transform: scale(1);   }
+      50%       { opacity: 0.3; transform: scale(0.75); }
+    }
+    .oracle-spark {
+      font-size: 10px;
+      color: var(--red);
+      animation: spark-pulse 1.6s ease-in-out infinite;
+      flex-shrink: 0;
+      line-height: 1;
+    }
+    .oracle-spark.idle { animation: none; opacity: 0.4; }
+    @keyframes phrase-in {
+      from { opacity: 0; transform: translateY(4px); }
+      to   { opacity: 1; transform: translateY(0);   }
+    }
+    .oracle-phrase {
       font-family: 'Merriweather', serif;
       font-size: 12px;
+      font-style: italic;
       font-weight: 300;
-      color: #555;
+      color: #444;
+      animation: phrase-in 0.35s ease-out;
     }
-    .search-found {
+    .oracle-count {
       font-family: 'Oswald', sans-serif;
       font-size: 11px;
       letter-spacing: 1px;
       color: var(--red);
+      margin-left: auto;
+    }
+    .oracle-phase-label {
+      font-family: 'Oswald', sans-serif;
+      font-size: 9px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #ccc;
+      margin-top: 7px;
+      min-height: 13px;
     }
 
     /* ── Triage keyboard hint ── */
@@ -1499,20 +1526,15 @@
       </div>
     </div>
     <div class="search-progress" id="search-progress" style="display:none">
-      <div class="search-phases">
-        <div class="phase-step" id="phase-1">1 &middot; Queries</div>
-        <div class="phase-step" id="phase-2">2 &middot; Google News</div>
-        <div class="phase-step" id="phase-3">3 &middot; Yahoo News</div>
-        <div class="phase-step" id="phase-4">4 &middot; GDELT</div>
-        <div class="phase-step" id="phase-5">5 &middot; RSS Feeds</div>
-        <div class="phase-step" id="phase-6">6 &middot; Semantic Scholar</div>
-        <div class="phase-step" id="phase-7">7 &middot; OSTI</div>
-        <div class="phase-step" id="phase-8">8 &middot; Score &amp; Import</div>
+      <div class="oracle-bar-wrap">
+        <div class="oracle-bar-fill" id="oracle-bar-fill"></div>
       </div>
-      <div class="search-status-row">
-        <span class="search-status-text" id="search-status-text">Starting…</span>
-        <span class="search-found" id="search-found"></span>
+      <div class="oracle-status-row">
+        <span class="oracle-spark" id="oracle-spark">✦</span>
+        <span class="oracle-phrase" id="oracle-phrase">Consulting the oracle…</span>
+        <span class="oracle-count" id="search-found"></span>
       </div>
+      <div class="oracle-phase-label" id="oracle-phase-label"></div>
     </div>
   </div>
 
@@ -2858,6 +2880,66 @@
   let searchJobId = null;
   let searchPoller = null;
 
+  const ORACLE_PHRASES = [
+    "Drinking from a sacred spring",
+    "Inhaling volcanic fumes",
+    "Chewing laurel leaves",
+    "Entering a shamanic trance",
+    "Phoning a friend",
+    "Asking Dr. Gattie",
+    "Asking what good is grand strategy",
+    "Preserving the integrity of our institutions",
+    "Enabling constructivist feedback loops",
+    "Reading tea leaves",
+    "Scattering bones",
+    "Believing intensely",
+    "Allowing for flexible interpretation",
+    "Reading entrails",
+    "Interpreting bird migrations",
+    "Querying ravens",
+    "Reading palms",
+    "Following whispers",
+    "Chasing omens",
+    "Watching sacrificial flames",
+    "Dancing around fires",
+    "Visiting Plant Vogtle",
+    "Listening to the trees sing",
+    "Gossiping with serpents",
+    "Consulting the augurs",
+    "Gazing into still waters",
+    "Parsing the auguries",
+    "Watching for signs",
+    "Communing with the algorithm",
+    "Awaiting the revelation",
+  ];
+  let _oracleIdx = 0;
+  let _oracleTimer = null;
+
+  function _setOraclePhrase(text) {
+    const el = document.getElementById('oracle-phrase');
+    if (!el) return;
+    el.style.animation = 'none';
+    void el.offsetHeight;
+    el.textContent = text;
+    el.style.animation = 'phrase-in 0.35s ease-out';
+  }
+
+  function _startOracle() {
+    _oracleIdx = Math.floor(Math.random() * ORACLE_PHRASES.length);
+    _setOraclePhrase(ORACLE_PHRASES[_oracleIdx] + '…');
+    _oracleTimer = setInterval(() => {
+      _oracleIdx = (_oracleIdx + 1) % ORACLE_PHRASES.length;
+      _setOraclePhrase(ORACLE_PHRASES[_oracleIdx] + '…');
+    }, 2600);
+  }
+
+  function _stopOracle(finalText) {
+    if (_oracleTimer) { clearInterval(_oracleTimer); _oracleTimer = null; }
+    if (finalText !== undefined) _setOraclePhrase(finalText);
+    const spark = document.getElementById('oracle-spark');
+    if (spark) spark.className = 'oracle-spark idle';
+  }
+
   function toggleCustomDate(val) {
     const box = document.getElementById('adv-custom-date');
     box.style.display = val === 'custom' ? '' : 'none';
@@ -2875,12 +2957,15 @@
     const btn = document.getElementById('search-btn');
     btn.disabled = true;
     document.getElementById('search-progress').style.display = '';
-    document.getElementById('search-status-text').textContent = 'Starting…';
     document.getElementById('search-found').textContent = '';
-    for (let i = 1; i <= 8; i++) {
-      const el = document.getElementById(`phase-${i}`);
-      if (el) el.className = 'phase-step';
-    }
+    document.getElementById('oracle-phase-label').textContent = '';
+    const barFill = document.getElementById('oracle-bar-fill');
+    barFill.className = 'oracle-bar-fill';
+    barFill.style.width = '0%';
+    const spark = document.getElementById('oracle-spark');
+    if (spark) spark.className = 'oracle-spark';
+    _stopOracle();
+    _startOracle();
 
     const dateRange    = document.getElementById('adv-date-range')?.value || '';
     const rawFrom  = dateRange === 'custom' ? (document.getElementById('adv-date-from')?.value || '') : '';
@@ -2933,27 +3018,30 @@
       const res = await fetch(`/api/research/jobs/${searchJobId}/status`);
       const job = await res.json();
 
-      document.getElementById('search-status-text').textContent = job.phase || 'Working…';
+      // Progress bar — phase_num out of 10 total phases
+      const totalPhases = job.total_phases || 10;
+      const pct = job.phase_num > 0 ? Math.min(95, Math.round((job.phase_num / totalPhases) * 100)) : 5;
+      document.getElementById('oracle-bar-fill').style.width = pct + '%';
+      document.getElementById('oracle-phase-label').textContent = job.phase || '';
       if (job.urls_found > 0) {
-        document.getElementById('search-found').textContent = `${job.urls_found} articles found`;
-      }
-
-      for (let i = 1; i <= 8; i++) {
-        const el = document.getElementById(`phase-${i}`);
-        if (!el) continue;
-        if (i < job.phase_num)      el.className = 'phase-step done';
-        else if (i === job.phase_num) el.className = 'phase-step active';
-        else                          el.className = 'phase-step';
+        document.getElementById('search-found').textContent = `${job.urls_found} found`;
       }
 
       if (job.status === 'done') {
         clearInterval(searchPoller); searchPoller = null;
         document.getElementById('search-btn').disabled = false;
+        const barFill = document.getElementById('oracle-bar-fill');
+        barFill.style.width = '100%';
+        barFill.className = 'oracle-bar-fill complete';
         if (job.urls_found === 0) {
+          _stopOracle('Nothing surfaced — try broadening your search');
+          document.getElementById('oracle-phase-label').textContent = '';
           toast('No articles found — try broadening your search, relaxing filters, or using different keywords.', true);
-          document.getElementById('search-progress').style.display = 'none';
+          setTimeout(() => { document.getElementById('search-progress').style.display = 'none'; }, 3000);
           return;
         }
+        _stopOracle(`${job.urls_found} articles gathered`);
+        document.getElementById('oracle-phase-label').textContent = '';
         toast(`Search complete — ${job.urls_found} articles imported`);
         await refreshDetail();
         // Auto-switch to unreviewed so the user goes straight into triage
@@ -2964,8 +3052,9 @@
       } else if (job.status === 'error') {
         clearInterval(searchPoller); searchPoller = null;
         document.getElementById('search-btn').disabled = false;
+        _stopOracle('Search encountered an error');
+        document.getElementById('oracle-phase-label').textContent = job.error || '';
         toast('Search error: ' + (job.error || 'unknown'), true);
-        document.getElementById('search-status-text').textContent = 'Error — ' + (job.error || 'unknown');
       }
     } catch (_) { /* silent, retry next tick */ }
   }
