@@ -1357,7 +1357,9 @@ def search_yahoo_news(query: str) -> list[dict]:
 
 def search_gdelt(query: str, date_days: int | None = None) -> list[dict]:
     """Query GDELT DOC API for matching articles (up to 50)."""
-    encoded = urllib.parse.quote_plus(query)  # use + for spaces (GDELT convention)
+    # Prepend sourcelang:english to filter out non-English articles
+    gdelt_query = f'sourcelang:english {query}'
+    encoded = urllib.parse.quote_plus(gdelt_query)
     url = (
         f"https://api.gdeltproject.org/api/v2/doc/doc"
         f"?query={encoded}&mode=artlist&maxrecords=50&format=json&sort=datedesc"
@@ -1826,20 +1828,24 @@ def search_federal_register(query: str, date_days: int | None = None) -> list[di
 
 
 def search_crs(query: str, date_days: int | None = None) -> list[dict]:
-    """Search Congressional Research Service reports via the Congress.gov API."""
+    """Search Congressional Research Service reports via the Congress.gov API.
+
+    The /v3/crsreport endpoint does not support keyword search — it only accepts
+    date range filters.  We fetch recent reports and let the scorer handle relevance.
+    """
     key = os.environ.get('CONGRESS_API_KEY', '').strip()
     if not key:
         return []
-    # congress.gov v3 requires q as a JSON-encoded object, not plain text
     params: dict = {
         'api_key': key,
         'format': 'json',
         'limit': 20,
-        'q': json.dumps({"query": query}),
     }
-    cutoff_date = ''
     if date_days:
-        cutoff_date = (datetime.now(timezone.utc) - timedelta(days=date_days)).strftime('%Y-%m-%d')
+        from_dt = (datetime.now(timezone.utc) - timedelta(days=date_days)).strftime(
+            '%Y-%m-%dT%H:%M:%SZ'
+        )
+        params['fromDateTime'] = from_dt
     try:
         resp = req_lib.get(
             'https://api.congress.gov/v3/crsreport',
@@ -1848,16 +1854,13 @@ def search_crs(query: str, date_days: int | None = None) -> list[dict]:
         )
         resp.raise_for_status()
         data = resp.json()
-        reports = data.get('CRSReports') or data.get('reports') or []
+        reports = (data.get('CRSReports') or data.get('crsReports')
+                   or data.get('reports') or [])
         results = []
         for rep in reports:
             number = (rep.get('number') or '').strip()
             if not number:
                 continue
-            if cutoff_date:
-                update_date = (rep.get('updateDate') or '')[:10]
-                if update_date and update_date < cutoff_date:
-                    continue
             url = f'https://crsreports.congress.gov/product/details?code={number}'
             title_raw = (rep.get('title') or '').strip()
             description = (rep.get('summary') or '').strip()
@@ -1926,13 +1929,19 @@ def search_core(query: str, date_days: int | None = None) -> list[dict]:
 
 
 def search_iaea(query: str, date_days: int | None = None) -> list[dict]:
-    """Search IAEA RSS feeds for matching news and topic articles."""
+    """Search nuclear/energy security RSS feeds.
+
+    IAEA feeds are often geo-blocked from cloud servers, so we include
+    World Nuclear News and NEA as reachable fallbacks with equivalent coverage.
+    """
     feeds = [
+        # High-reliability alternatives (AWS-accessible)
+        ('https://www.world-nuclear-news.org/rss', 'World Nuclear News'),
+        ('https://www.powermag.com/feed/', 'Power Magazine'),
+        # IAEA direct feeds (may be geo-blocked from cloud IPs)
         ('https://www.iaea.org/feeds/news.xml', 'IAEA'),
         ('https://www.iaea.org/feeds/topicfeeds/nuclear-security.xml', 'IAEA Nuclear Security'),
-        ('https://www.iaea.org/feeds/topicfeeds/safeguards.xml', 'IAEA Safeguards'),
         ('https://www.iaea.org/feeds/topicfeeds/nuclear-power.xml', 'IAEA Nuclear Power'),
-        ('https://www.iaea.org/feeds/topicfeeds/climate-change.xml', 'IAEA Climate & Energy'),
     ]
     keywords = [w.lower() for w in query.split() if len(w) > 3]
     cutoff = (datetime.now(timezone.utc) - timedelta(days=date_days)) if date_days else None
