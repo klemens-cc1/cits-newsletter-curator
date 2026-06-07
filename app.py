@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import time
 from datetime import datetime
 
@@ -42,6 +43,14 @@ def create_app():
     return app
 
 
+_CRED_RE = re.compile(r"(://[^:/@\s]+):[^@\s]+@")
+
+
+def _safe_exc(exc: Exception) -> str:
+    """Strip credentials from exception messages before logging."""
+    return _CRED_RE.sub(r"\1:***@", str(exc))
+
+
 def _init_db(retries: int = 6, base_delay: int = 3) -> None:
     """Create tables and run migrations, retrying on transient DNS/connection errors.
 
@@ -55,12 +64,12 @@ def _init_db(retries: int = 6, base_delay: int = 3) -> None:
             return
         except Exception as exc:
             if attempt >= retries:
-                log.error("DB init failed after %d attempts: %s", retries, exc)
+                log.error("DB init failed after %d attempts: %s", retries, _safe_exc(exc))
                 raise
             delay = base_delay * attempt   # 3 s, 6 s, 9 s, 12 s, 15 s
             log.warning(
                 "DB not ready (attempt %d/%d): %s — retrying in %ds",
-                attempt, retries, exc, delay,
+                attempt, retries, type(exc).__name__, delay,
             )
             time.sleep(delay)
 
