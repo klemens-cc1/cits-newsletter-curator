@@ -25,6 +25,14 @@ from typing import Any
 from flask import Blueprint, jsonify, render_template, request
 from sqlalchemy import func, text
 
+
+def _qint(key: str, default: int, max_val: int | None = None) -> int:
+    try:
+        n = int(request.args.get(key, default))
+    except (ValueError, TypeError):
+        n = default
+    return min(n, max_val) if max_val is not None else n
+
 from app import db
 from models import Article
 from osint_models import OsintAsset, OsintGridAlert, OsintGridSnapshot, OsintIncident
@@ -64,7 +72,7 @@ def osint_health():
 def osint_assets():
     asset_type = request.args.get("type")
     state      = request.args.get("state")
-    limit      = min(int(request.args.get("limit", "5000")), 25000)
+    limit      = _qint("limit", 5000, 25000)
 
     q = OsintAsset.query
     if asset_type:
@@ -229,7 +237,7 @@ def osint_grid_ingest():
 
 @osint_bp.route("/api/osint/incidents")
 def osint_incidents():
-    days  = int(request.args.get("days", "30"))
+    days  = _qint("days", 30)
     since = date.today() - timedelta(days=days)
     rows  = (
         OsintIncident.query
@@ -312,7 +320,7 @@ def osint_incidents_ingest():
 
 @osint_bp.route("/api/osint/news")
 def osint_news():
-    limit = min(int(request.args.get("limit", "30")), 100)
+    limit = _qint("limit", 30, 100)
     rows  = (
         Article.query
         .order_by(Article.published_at.desc().nullslast(), Article.fetched_at.desc())

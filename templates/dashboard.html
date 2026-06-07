@@ -281,47 +281,65 @@ document.querySelectorAll('input[id^="lyr-"]').forEach(cb => {
 });
 
 // ── Grid telemetry panel ───────────────────────────────────────────────────
+function _mkEl(tag, style, text) {
+  const el = document.createElement(tag);
+  if (style) el.style.cssText = style;
+  if (text !== undefined) el.textContent = text;
+  return el;
+}
+
 async function loadGrid() {
+  const panel = document.getElementById('grid-panel');
   let data;
   try {
     const r = await fetch(`${API}/api/osint/grid/current`);
     data = await r.json();
   } catch (e) {
-    document.getElementById('grid-panel').innerHTML = '<p class="empty">Grid data unavailable.</p>';
-    return;
+    const p = _mkEl('p', null, 'Grid data unavailable.'); p.className = 'empty';
+    panel.replaceChildren(p); return;
   }
   const isos = Object.keys(data);
   if (!isos.length) {
-    document.getElementById('grid-panel').innerHTML = '<p class="empty">No grid snapshots yet — workflow pending.</p>';
-    return;
+    const p = _mkEl('p', null, 'No grid snapshots yet — workflow pending.'); p.className = 'empty';
+    panel.replaceChildren(p); return;
   }
-  document.getElementById('grid-panel').innerHTML = isos.map(iso => {
+
+  panel.replaceChildren();
+  isos.forEach(iso => {
     const rows  = data[iso].filter(r => r.metric === 'fuel_mix_mw' && r.fuel);
     const total = rows.reduce((s, r) => s + r.value, 0);
     const top   = rows.sort((a, b) => b.value - a.value).slice(0, 6);
     const ts    = rows[0]?.timestamp
       ? new Date(rows[0].timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-    const bars  = top.map(r => {
-      const pct = total > 0 ? (r.value / total * 100) : 0;
-      const col = FUEL_COLORS[r.fuel] || '#94a3b8';
-      return `<div style="display:flex;align-items:center;gap:5px;margin:2px 0">
-        <span class="swatch" style="background:${col}"></span>
-        <span style="font-size:.72rem;flex:1;color:#cbd5e1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.fuel}</span>
-        <div class="fuel-bar-track" style="width:50px">
-          <div class="fuel-bar-fill" style="width:${pct.toFixed(1)}%;background:${col}"></div>
-        </div>
-        <span style="font-size:.7rem;color:#94a3b8;width:28px;text-align:right">${pct.toFixed(0)}%</span>
-      </div>`;
-    }).join('');
-    return `<div class="grid-card">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px">
-        <span style="font-size:.84rem;font-weight:600">${iso}</span>
-        <span class="muted" style="font-size:.7rem">${ts}</span>
-      </div>
-      ${bars || '<span class="empty" style="font-size:.72rem">No data</span>'}
-      <div style="font-size:.7rem;color:#475569;margin-top:3px">${(total/1000).toFixed(1)} GW total</div>
-    </div>`;
-  }).join('');
+
+    const card = _mkEl('div'); card.className = 'grid-card';
+    const hdr = _mkEl('div', 'display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px');
+    hdr.appendChild(_mkEl('span', 'font-size:.84rem;font-weight:600', iso));
+    const tsEl = _mkEl('span', 'font-size:.7rem', ts); tsEl.className = 'muted';
+    hdr.appendChild(tsEl); card.appendChild(hdr);
+
+    if (!top.length) {
+      const em = _mkEl('span', 'font-size:.72rem', 'No data'); em.className = 'empty';
+      card.appendChild(em);
+    } else {
+      top.forEach(r => {
+        const pct = total > 0 ? (r.value / total * 100) : 0;
+        const col = FUEL_COLORS[r.fuel] || '#94a3b8';
+        const barRow = _mkEl('div', 'display:flex;align-items:center;gap:5px;margin:2px 0');
+        const swatch = _mkEl('span'); swatch.className = 'swatch'; swatch.style.background = col;
+        const lbl = _mkEl('span', 'font-size:.72rem;flex:1;color:#cbd5e1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', r.fuel);
+        const track = _mkEl('div'); track.className = 'fuel-bar-track'; track.style.width = '50px';
+        const fill = _mkEl('div'); fill.className = 'fuel-bar-fill'; fill.style.width = pct.toFixed(1) + '%'; fill.style.background = col;
+        track.appendChild(fill);
+        const pctEl = _mkEl('span', 'font-size:.7rem;color:#94a3b8;width:28px;text-align:right', pct.toFixed(0) + '%');
+        barRow.appendChild(swatch); barRow.appendChild(lbl); barRow.appendChild(track); barRow.appendChild(pctEl);
+        card.appendChild(barRow);
+      });
+    }
+
+    card.appendChild(_mkEl('div', 'font-size:.7rem;color:#475569;margin-top:3px', (total / 1000).toFixed(1) + ' GW total'));
+    panel.appendChild(card);
+  });
 }
 
 // ── News strip ─────────────────────────────────────────────────────────────
