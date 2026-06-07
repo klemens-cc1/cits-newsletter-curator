@@ -1,7 +1,12 @@
+import logging
 import os
+import time
+from datetime import datetime
+
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
+
+log = logging.getLogger(__name__)
 
 db = SQLAlchemy()
 
@@ -32,10 +37,32 @@ def create_app():
     app.register_blueprint(osint_bp)
 
     with app.app_context():
-        db.create_all()
-        _run_migrations(db)
+        _init_db(retries=6, base_delay=3)
 
     return app
+
+
+def _init_db(retries: int = 6, base_delay: int = 3) -> None:
+    """Create tables and run migrations, retrying on transient DNS/connection errors.
+
+    Render's internal database hostname can be unresolvable for a few seconds
+    during a cold-start before the private network is fully ready.
+    """
+    for attempt in range(1, retries + 1):
+        try:
+            db.create_all()
+            _run_migrations(db)
+            return
+        except Exception as exc:
+            if attempt >= retries:
+                log.error("DB init failed after %d attempts: %s", retries, exc)
+                raise
+            delay = base_delay * attempt   # 3 s, 6 s, 9 s, 12 s, 15 s
+            log.warning(
+                "DB not ready (attempt %d/%d): %s — retrying in %ds",
+                attempt, retries, exc, delay,
+            )
+            time.sleep(delay)
 
 
 def _run_migrations(db):
