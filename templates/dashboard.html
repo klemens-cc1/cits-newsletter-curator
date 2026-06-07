@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OSINT Energy Security Dashboard</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIINfQ97toznw4tLkzAhZ14PmIze9/0Tj4=" crossorigin="anonymous" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" integrity="sha384-pmjIAcz2bAn0xukfxADbZIb3t8oRT9Sv0rvO+BR5Csr6Dhqq+nZs59P0pPKQJkEV" crossorigin="anonymous" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" integrity="sha384-wgw+aLYNQ7dlhK47ZPK7FRACiq7ROZwgFNg0m04avm4CaXS+Z9Y7nMu8yNjBKYC+" crossorigin="anonymous" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body, #map { height: 100%; margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    #sidebar, #detail, #bottom { position: absolute; z-index: 500; background: rgba(11, 18, 32, 0.93); color: #f8fafc; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.35); backdrop-filter: blur(6px); }
+    #sidebar { top: 16px; left: 16px; width: 300px; max-height: calc(100% - 32px); overflow-y: auto; border-radius: 14px; padding: 16px; scrollbar-width: thin; scrollbar-color: #334155 transparent; }
+    #detail  { top: 16px; right: 16px; width: 320px; max-height: calc(100% - 180px); overflow-y: auto; border-radius: 14px; padding: 16px; display: none; scrollbar-width: thin; scrollbar-color: #334155 transparent; }
+    #bottom  { left: 332px; right: 332px; bottom: 16px; max-height: 160px; overflow-y: auto; border-radius: 14px; padding: 10px 14px; scrollbar-width: thin; scrollbar-color: #334155 transparent; }
+    h1 { font-size: 1.05rem; margin: 0 0 2px; font-weight: 700; letter-spacing: -.01em; }
+    h2 { font-size: 0.78rem; margin: 16px 0 6px; color: #93c5fd; text-transform: uppercase; letter-spacing: .1em; font-weight: 600; }
+    label { display: flex; align-items: center; gap: 8px; margin: 6px 0; cursor: pointer; font-size: .85rem; user-select: none; }
+    label input[type=checkbox] { accent-color: #3b82f6; width: 14px; height: 14px; cursor: pointer; }
+    button.close-btn { margin-top: 10px; border: 0; border-radius: 8px; padding: 7px 12px; background: #1e3a5f; color: #93c5fd; cursor: pointer; font-size: .82rem; width: 100%; }
+    button.close-btn:hover { background: #2563eb; color: white; }
+    .muted { color: #94a3b8; font-size: 0.82rem; }
+    .grid-card  { border-top: 1px solid rgba(148, 163, 184, .18); padding: 8px 0; }
+    .news-item  { border-top: 1px solid rgba(148, 163, 184, .18); padding: 6px 0; }
+    .pill { display: inline-block; border-radius: 999px; padding: 2px 8px; margin: 2px 2px 2px 0; background: rgba(59, 130, 246, .18); color: #bfdbfe; font-size: .72rem; cursor: pointer; user-select: none; transition: background .15s; }
+    .pill:hover, .pill.active { background: rgba(59, 130, 246, .4); }
+    .pill.ics  { background: rgba(239, 68, 68, .18); color: #fca5a5; }
+    .pill.ics:hover,  .pill.ics.active  { background: rgba(239, 68, 68, .4); }
+    .pill.nrc  { background: rgba(168, 85, 247, .18); color: #d8b4fe; }
+    .pill.nrc:hover,  .pill.nrc.active  { background: rgba(168, 85, 247, .4); }
+    .empty { color: #475569; font-style: italic; font-size: .82rem; }
+    a { color: #93c5fd; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    #status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #64748b; margin-right: 5px; vertical-align: middle; }
+    #status-dot.live  { background: #22c55e; }
+    #status-dot.error { background: #ef4444; }
+    .detail-row   { margin: 5px 0; }
+    .detail-label { font-size: .72rem; color: #64748b; text-transform: uppercase; letter-spacing: .06em; }
+    .detail-value { font-size: .88rem; color: #e2e8f0; }
+    .flag-warn { color: #f87171; font-size: .82rem; margin-top: 8px; background: rgba(239,68,68,.1); border-radius: 6px; padding: 6px 8px; }
+    .swatch { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .fuel-bar-track { flex: 1; height: 5px; background: rgba(255,255,255,.08); border-radius: 3px; overflow: hidden; }
+    .fuel-bar-fill  { height: 100%; border-radius: 3px; }
+    .bottom-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+    .layer-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  </style>
+</head>
+<body>
+<div id="map"></div>
+
+<!-- Left sidebar: layer controls + ISO grid status -->
+<div id="sidebar">
+  <h1>⚡ Energy Security</h1>
+  <div class="muted" style="font-size:.78rem;margin-bottom:2px">
+    <span id="status-dot"></span><span id="status-text">Connecting…</span>
+  </div>
+
+  <h2>Layers</h2>
+  <label>
+    <span class="layer-dot" style="background:#f59e0b"></span>
+    <input type="checkbox" id="lyr-power_plant" checked> Power Plants
+    <span class="muted" id="cnt-power_plant" style="margin-left:auto;font-size:.75rem"></span>
+  </label>
+  <label>
+    <span class="layer-dot" style="background:#38bdf8"></span>
+    <input type="checkbox" id="lyr-data_center"> Data Centers
+    <span class="muted" id="cnt-data_center" style="margin-left:auto;font-size:.75rem"></span>
+  </label>
+  <label>
+    <span class="layer-dot" style="background:#eab308"></span>
+    <input type="checkbox" id="lyr-substation"> Substations
+    <span class="muted" id="cnt-substation" style="margin-left:auto;font-size:.75rem"></span>
+  </label>
+  <label>
+    <span class="layer-dot" style="background:#22c55e"></span>
+    <input type="checkbox" id="lyr-pipeline"> Pipelines
+    <span class="muted" id="cnt-pipeline" style="margin-left:auto;font-size:.75rem"></span>
+  </label>
+  <label>
+    <span class="layer-dot" style="background:#ef4444"></span>
+    <input type="checkbox" id="lyr-incidents" checked> Incidents (90d)
+    <span class="muted" id="cnt-incidents" style="margin-left:auto;font-size:.75rem"></span>
+  </label>
+
+  <h2>Grid Status</h2>
+  <div id="grid-panel"><p class="empty">No grid data yet.</p></div>
+</div>
+
+<!-- Right panel: asset detail -->
+<div id="detail">
+  <h2 id="detail-type" style="margin-top:0"></h2>
+  <div id="detail-name" style="font-size:1rem;font-weight:600;margin-bottom:10px;color:#f1f5f9"></div>
+  <div id="detail-body"></div>
+  <button class="close-btn" onclick="closeDetail()">Close</button>
+</div>
+
+<!-- Bottom strip: news + incident feed -->
+<div id="bottom">
+  <div class="bottom-header">
+    <strong style="font-size:.82rem;white-space:nowrap">Recent Intelligence</strong>
+    <span class="pill active" id="f-all"         onclick="filterNews('all')">All</span>
+    <span class="pill ics"   id="f-ics_advisory" onclick="filterNews('ics_advisory')">Cyber/ICS</span>
+    <span class="pill nrc"   id="f-nrc_event"    onclick="filterNews('nrc_event')">Nuclear</span>
+  </div>
+  <div id="news-list" style="display:flex;gap:16px;overflow-x:auto;padding-bottom:4px">
+    <span class="empty">Loading…</span>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV/XN2GGnk=" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" integrity="sha384-eXVCORTRlv4FUUgS/xmOyr66XBVraen8ATNLMESp92FKXLAMiKkerixTiBvXriZr" crossorigin="anonymous"></script>
+<script>
+// API base is empty — all fetch() calls use relative URLs so this works
+// identically in local Flask dev and on Render.
+const API = '';
+
+// ── Map ────────────────────────────────────────────────────────────────────
+const map = L.map('map', { zoomControl: true }).setView([38.5, -96], 4);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  maxZoom: 19,
+}).addTo(map);
+
+// ── Config ─────────────────────────────────────────────────────────────────
+const ASSET_CFG = {
+  power_plant:  { color: '#f59e0b', radius: 5, label: 'Power Plant'  },
+  data_center:  { color: '#38bdf8', radius: 6, label: 'Data Center'  },
+  substation:   { color: '#eab308', radius: 4, label: 'Substation'   },
+  pipeline:     { color: '#22c55e', radius: 4, label: 'Pipeline'     },
+};
+
+const FUEL_COLORS = {
+  'Natural Gas': '#f97316', 'Gas': '#f97316', 'NG': '#f97316',
+  'Coal':        '#a8a29e',
+  'Nuclear':     '#a855f7',
+  'Wind':        '#22d3ee',
+  'Solar':       '#facc15',
+  'Hydro':       '#60a5fa', 'Hydroelectric': '#60a5fa', 'Hydro / Water': '#60a5fa',
+  'Battery':     '#4ade80',
+  'Oil':         '#dc2626',
+  'Other':       '#94a3b8', 'Other Renewables': '#6ee7b7',
+};
+
+// ── Layer registry ─────────────────────────────────────────────────────────
+const layers = {};
+
+function getOrCreateLayer(type) {
+  if (!layers[type]) {
+    layers[type] = type === 'incidents'
+      ? L.layerGroup()
+      : L.markerClusterGroup({ maxClusterRadius: 50, disableClusteringAtZoom: 11, chunkedLoading: true });
+  }
+  return layers[type];
+}
+
+// ── Status helpers ─────────────────────────────────────────────────────────
+function setStatus(text, state) {
+  document.getElementById('status-text').textContent = text;
+  document.getElementById('status-dot').className = state || '';
+}
+
+function setCount(type, n) {
+  const el = document.getElementById(`cnt-${type}`);
+  if (el) el.textContent = n > 0 ? n.toLocaleString() : '';
+}
+
+// ── Asset layer rendering ──────────────────────────────────────────────────
+async function loadLayer(type) {
+  const checkbox = document.getElementById(`lyr-${type}`);
+  const cfg = ASSET_CFG[type] || { color: '#94a3b8', radius: 4, label: type };
+  const layer = getOrCreateLayer(type);
+  layer.clearLayers();
+
+  let data;
+  try {
+    const r = await fetch(`${API}/api/osint/assets?type=${type}&limit=10000`);
+    data = await r.json();
+  } catch (e) { return 0; }
+
+  const features = data.features || [];
+  features.forEach(f => {
+    const g = f.geometry;
+    if (!g || g.type !== 'Point') return;
+    const [lng, lat] = g.coordinates;
+    if (!lat || !lng) return;
+    const marker = L.circleMarker([lat, lng], {
+      radius: cfg.radius, color: cfg.color, fillColor: cfg.color,
+      fillOpacity: 0.75, weight: 1, opacity: 0.9,
+    });
+    marker.on('click', () => showDetail(f, cfg));
+    layer.addLayer(marker);
+  });
+
+  if (checkbox && checkbox.checked) map.addLayer(layer);
+  setCount(type, features.length);
+  return features.length;
+}
+
+// ── Incident rendering ─────────────────────────────────────────────────────
+async function loadIncidents() {
+  const layer = getOrCreateLayer('incidents');
+  layer.clearLayers();
+  let rows;
+  try {
+    const r = await fetch(`${API}/api/osint/incidents?days=90`);
+    rows = await r.json();
+  } catch (e) { return 0; }
+
+  const geoRows = rows.filter(i => i.lat && i.lng);
+  geoRows.forEach(inc => {
+    const severity = inc.fatalities > 0 ? 9 : inc.injuries > 0 ? 7 : 5;
+    const circle = L.circleMarker([inc.lat, inc.lng], {
+      radius: severity, color: '#ef4444', fillColor: '#ef4444',
+      fillOpacity: 0.4, weight: 2, opacity: 0.85,
+    });
+    circle.bindPopup([
+      `<strong>${inc.type || inc.source}</strong>`,
+      inc.date ? `<br>${inc.date}` : '',
+      inc.operator ? `<br>${inc.operator}` : '',
+      inc.description ? `<br><span style="font-size:.85em">${inc.description.slice(0,120)}</span>` : '',
+    ].join(''));
+    layer.addLayer(circle);
+  });
+
+  if (document.getElementById('lyr-incidents').checked) map.addLayer(layer);
+  setCount('incidents', geoRows.length);
+  return geoRows.length;
+}
+
+// ── Asset detail panel ─────────────────────────────────────────────────────
+function showDetail(feature, cfg) {
+  const p = feature.properties;
+  document.getElementById('detail-type').textContent  = (cfg && cfg.label) || p.type || 'Asset';
+  document.getElementById('detail-name').textContent  = p.name || '(unnamed)';
+  const fields = [
+    ['State',    p.state],
+    ['County',   p.county],
+    ['Operator', p.operator],
+    ['Owner',    p.owner],
+    ['Fuel',     p.fuel_type],
+    ['Capacity', p.capacity_mw != null ? `${Number(p.capacity_mw).toLocaleString()} MW` : null],
+    ['Voltage',  p.voltage_kv  != null ? `${p.voltage_kv} kV` : null],
+    ['Status',   p.status],
+    ['Source',   p.source],
+  ];
+  const rows = fields.filter(([, v]) => v)
+    .map(([label, value]) => `
+      <div class="detail-row">
+        <div class="detail-label">${label}</div>
+        <div class="detail-value">${value}</div>
+      </div>`).join('');
+  const flag = p.foreign_link_flag
+    ? '<div class="flag-warn">⚠ Foreign ownership flag — review ownership chain</div>' : '';
+  document.getElementById('detail-body').innerHTML = rows + flag;
+  document.getElementById('detail').style.display = 'block';
+}
+
+function closeDetail() { document.getElementById('detail').style.display = 'none'; }
+
+// ── Layer toggle checkboxes ────────────────────────────────────────────────
+document.querySelectorAll('input[id^="lyr-"]').forEach(cb => {
+  cb.addEventListener('change', () => {
+    const type = cb.id.replace('lyr-', '');
+    const layer = layers[type];
+    if (!layer) return;
+    if (cb.checked) map.addLayer(layer); else map.removeLayer(layer);
+  });
+});
+
+// ── Grid telemetry panel ───────────────────────────────────────────────────
+async function loadGrid() {
+  let data;
+  try {
+    const r = await fetch(`${API}/api/osint/grid/current`);
+    data = await r.json();
+  } catch (e) {
+    document.getElementById('grid-panel').innerHTML = '<p class="empty">Grid data unavailable.</p>';
+    return;
+  }
+  const isos = Object.keys(data);
+  if (!isos.length) {
+    document.getElementById('grid-panel').innerHTML = '<p class="empty">No grid snapshots yet — workflow pending.</p>';
+    return;
+  }
+  document.getElementById('grid-panel').innerHTML = isos.map(iso => {
+    const rows  = data[iso].filter(r => r.metric === 'fuel_mix_mw' && r.fuel);
+    const total = rows.reduce((s, r) => s + r.value, 0);
+    const top   = rows.sort((a, b) => b.value - a.value).slice(0, 6);
+    const ts    = rows[0]?.timestamp
+      ? new Date(rows[0].timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+    const bars  = top.map(r => {
+      const pct = total > 0 ? (r.value / total * 100) : 0;
+      const col = FUEL_COLORS[r.fuel] || '#94a3b8';
+      return `<div style="display:flex;align-items:center;gap:5px;margin:2px 0">
+        <span class="swatch" style="background:${col}"></span>
+        <span style="font-size:.72rem;flex:1;color:#cbd5e1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.fuel}</span>
+        <div class="fuel-bar-track" style="width:50px">
+          <div class="fuel-bar-fill" style="width:${pct.toFixed(1)}%;background:${col}"></div>
+        </div>
+        <span style="font-size:.7rem;color:#94a3b8;width:28px;text-align:right">${pct.toFixed(0)}%</span>
+      </div>`;
+    }).join('');
+    return `<div class="grid-card">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px">
+        <span style="font-size:.84rem;font-weight:600">${iso}</span>
+        <span class="muted" style="font-size:.7rem">${ts}</span>
+      </div>
+      ${bars || '<span class="empty" style="font-size:.72rem">No data</span>'}
+      <div style="font-size:.7rem;color:#475569;margin-top:3px">${(total/1000).toFixed(1)} GW total</div>
+    </div>`;
+  }).join('');
+}
+
+// ── News strip ─────────────────────────────────────────────────────────────
+let allNews = [];
+let activeFilter = 'all';
+
+async function loadNews() {
+  try {
+    const r = await fetch(`${API}/api/osint/news?limit=60`);
+    allNews  = await r.json();
+    if (!Array.isArray(allNews)) allNews = [];
+  } catch (e) { allNews = []; }
+  renderNews();
+}
+
+function filterNews(cat) {
+  activeFilter = cat;
+  document.querySelectorAll('[id^="f-"]').forEach(el => el.classList.remove('active'));
+  const key = cat === 'all' ? 'f-all' : `f-${cat}`;
+  document.getElementById(key)?.classList.add('active');
+  renderNews();
+}
+
+function renderNews() {
+  const list  = document.getElementById('news-list');
+  const items = activeFilter === 'all' ? allNews : allNews.filter(a => a.category === activeFilter);
+  if (!items.length) { list.innerHTML = '<span class="empty">No items</span>'; return; }
+  list.innerHTML = items.slice(0, 25).map(a => {
+    const catClass = a.category === 'ics_advisory' ? 'ics' : a.category === 'nrc_event' ? 'nrc' : '';
+    const catLabel = a.category
+      ? `<span class="pill ${catClass}" style="cursor:default">${a.category}</span>` : '';
+    const dt = a.published_at
+      ? new Date(a.published_at).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+    return `<div class="news-item" style="min-width:220px;max-width:260px;flex-shrink:0">
+      <a href="${a.url}" target="_blank" rel="noopener"
+         style="font-size:.78rem;line-height:1.4;display:block;margin-bottom:3px">${a.title}</a>
+      ${catLabel}
+      <span class="muted" style="font-size:.7rem">${a.feed_name || ''}${dt ? ' · ' + dt : ''}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── Boot ───────────────────────────────────────────────────────────────────
+async function init() {
+  setStatus('Connecting…', '');
+
+  try {
+    await fetch(`${API}/api/osint/health`);
+  } catch (e) {
+    setStatus('Service unavailable', 'error');
+    document.getElementById('grid-panel').innerHTML = '<p class="empty">Could not reach API.</p>';
+    document.getElementById('news-list').innerHTML  = '<span class="empty">API unavailable</span>';
+    return;
+  }
+
+  setStatus('Loading power plants…', '');
+  await loadLayer('power_plant');
+
+  setStatus('Loading data centers…', '');
+  await loadLayer('data_center');
+
+  setStatus('Loading incidents…', '');
+  await loadIncidents();
+
+  // Substations + pipelines are large — lazy-load on first toggle
+  document.getElementById('lyr-substation').addEventListener('change', async function () {
+    if (this.checked && (!layers.substation || layers.substation.getLayers().length === 0)) {
+      setStatus('Loading substations…', '');
+      await loadLayer('substation');
+      setStatus('Live', 'live');
+    }
+  }, { once: true });
+
+  document.getElementById('lyr-pipeline').addEventListener('change', async function () {
+    if (this.checked && (!layers.pipeline || layers.pipeline.getLayers().length === 0)) {
+      setStatus('Loading pipelines…', '');
+      await loadLayer('pipeline');
+      setStatus('Live', 'live');
+    }
+  }, { once: true });
+
+  setStatus('Loading grid data…', '');
+  await loadGrid();
+
+  setStatus('Loading news…', '');
+  await loadNews();
+
+  setStatus('Live', 'live');
+}
+
+init();
+</script>
+</body>
+</html>

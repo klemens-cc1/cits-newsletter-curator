@@ -27,6 +27,10 @@ def create_app():
     from routes import bp
     app.register_blueprint(bp)
 
+    import osint_models  # noqa: F401 — registers ORM models so db.create_all() sees them
+    from osint_routes import osint_bp
+    app.register_blueprint(osint_bp)
+
     with app.app_context():
         db.create_all()
         _run_migrations(db)
