@@ -214,12 +214,19 @@ async function loadIncidents() {
       radius: severity, color: '#ef4444', fillColor: '#ef4444',
       fillOpacity: 0.4, weight: 2, opacity: 0.85,
     });
-    circle.bindPopup([
-      `<strong>${inc.type || inc.source}</strong>`,
-      inc.date ? `<br>${inc.date}` : '',
-      inc.operator ? `<br>${inc.operator}` : '',
-      inc.description ? `<br><span style="font-size:.85em">${inc.description.slice(0,120)}</span>` : '',
-    ].join(''));
+    const popup = document.createElement('div');
+    const heading = document.createElement('strong');
+    heading.textContent = inc.type || inc.source || '';
+    popup.appendChild(heading);
+    if (inc.date) { popup.appendChild(document.createElement('br')); popup.appendChild(document.createTextNode(inc.date)); }
+    if (inc.operator) { popup.appendChild(document.createElement('br')); popup.appendChild(document.createTextNode(inc.operator)); }
+    if (inc.description) {
+      popup.appendChild(document.createElement('br'));
+      const sm = document.createElement('span'); sm.style.fontSize = '.85em';
+      sm.textContent = inc.description.slice(0, 120);
+      popup.appendChild(sm);
+    }
+    circle.bindPopup(popup);
     layer.addLayer(circle);
   });
 
@@ -244,15 +251,20 @@ function showDetail(feature, cfg) {
     ['Status',   p.status],
     ['Source',   p.source],
   ];
-  const rows = fields.filter(([, v]) => v)
-    .map(([label, value]) => `
-      <div class="detail-row">
-        <div class="detail-label">${label}</div>
-        <div class="detail-value">${value}</div>
-      </div>`).join('');
-  const flag = p.foreign_link_flag
-    ? '<div class="flag-warn">⚠ Foreign ownership flag — review ownership chain</div>' : '';
-  document.getElementById('detail-body').innerHTML = rows + flag;
+  const body = document.getElementById('detail-body');
+  body.replaceChildren();
+  fields.filter(([, v]) => v).forEach(([label, value]) => {
+    const row = document.createElement('div'); row.className = 'detail-row';
+    const lbl = document.createElement('div'); lbl.className = 'detail-label'; lbl.textContent = label;
+    const val = document.createElement('div'); val.className = 'detail-value'; val.textContent = value;
+    row.appendChild(lbl); row.appendChild(val);
+    body.appendChild(row);
+  });
+  if (p.foreign_link_flag) {
+    const warn = document.createElement('div'); warn.className = 'flag-warn';
+    warn.textContent = '⚠ Foreign ownership flag — review ownership chain';
+    body.appendChild(warn);
+  }
   document.getElementById('detail').style.display = 'block';
 }
 
@@ -336,20 +348,44 @@ function filterNews(cat) {
 function renderNews() {
   const list  = document.getElementById('news-list');
   const items = activeFilter === 'all' ? allNews : allNews.filter(a => a.category === activeFilter);
-  if (!items.length) { list.innerHTML = '<span class="empty">No items</span>'; return; }
-  list.innerHTML = items.slice(0, 25).map(a => {
-    const catClass = a.category === 'ics_advisory' ? 'ics' : a.category === 'nrc_event' ? 'nrc' : '';
-    const catLabel = a.category
-      ? `<span class="pill ${catClass}" style="cursor:default">${a.category}</span>` : '';
+  list.replaceChildren();
+  if (!items.length) {
+    const empty = document.createElement('span'); empty.className = 'empty'; empty.textContent = 'No items';
+    list.appendChild(empty); return;
+  }
+  items.slice(0, 25).forEach(a => {
+    const card = document.createElement('div');
+    card.className = 'news-item';
+    card.style.cssText = 'min-width:220px;max-width:260px;flex-shrink:0';
+
+    let safeHref = '#';
+    try {
+      const parsed = new URL(a.url || '');
+      if (parsed.protocol === 'https:' || parsed.protocol === 'http:') safeHref = parsed.href;
+    } catch (_) {}
+
+    const link = document.createElement('a');
+    link.href = safeHref; link.target = '_blank'; link.rel = 'noopener';
+    link.style.cssText = 'font-size:.78rem;line-height:1.4;display:block;margin-bottom:3px';
+    link.textContent = a.title || '(untitled)';
+    card.appendChild(link);
+
+    if (a.category) {
+      const catClass = a.category === 'ics_advisory' ? 'ics' : a.category === 'nrc_event' ? 'nrc' : '';
+      const pill = document.createElement('span');
+      pill.className = `pill ${catClass}`; pill.style.cursor = 'default';
+      pill.textContent = a.category;
+      card.appendChild(pill);
+    }
+
+    const meta = document.createElement('span'); meta.className = 'muted'; meta.style.fontSize = '.7rem';
     const dt = a.published_at
       ? new Date(a.published_at).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
-    return `<div class="news-item" style="min-width:220px;max-width:260px;flex-shrink:0">
-      <a href="${a.url}" target="_blank" rel="noopener"
-         style="font-size:.78rem;line-height:1.4;display:block;margin-bottom:3px">${a.title}</a>
-      ${catLabel}
-      <span class="muted" style="font-size:.7rem">${a.feed_name || ''}${dt ? ' · ' + dt : ''}</span>
-    </div>`;
-  }).join('');
+    meta.textContent = (a.feed_name || '') + (dt ? ' · ' + dt : '');
+    card.appendChild(meta);
+
+    list.appendChild(card);
+  });
 }
 
 // ── Boot ───────────────────────────────────────────────────────────────────
