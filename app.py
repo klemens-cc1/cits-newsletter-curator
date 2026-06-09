@@ -1,10 +1,11 @@
 import logging
 import os
 import re
+import threading
 import time
 from datetime import datetime
 
-from flask import Flask
+from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 
 log = logging.getLogger(__name__)
@@ -37,8 +38,28 @@ def create_app():
     from osint_routes import osint_bp
     app.register_blueprint(osint_bp)
 
-    with app.app_context():
-        _init_db(retries=10, base_delay=5)
+    # Health endpoint — must respond before DB is ready so Render deploy succeeds.
+    @app.get("/health")
+    def health():
+        return jsonify({"status": "ok"}), 200
+
+    # Lazy DB init: don't block Gunicorn startup. The internal Render hostname
+    # (dpg-xxx-a) can be unresolvable for several seconds after cold-start while
+    # private-network DNS propagates. Deferring until first real request gives the
+    # network time to settle without holding up port binding.
+    _db_ready = {"value": False}
+    _db_lock = threading.Lock()
+
+    @app.before_request
+    def _lazy_db_init():
+        if request.path == "/health":
+            return  # never block the health check
+        if _db_ready["value"]:
+            return
+        with _db_lock:
+            if not _db_ready["value"]:
+                _init_db(retries=10, base_delay=5)
+                _db_ready["value"] = True
 
     return app
 
