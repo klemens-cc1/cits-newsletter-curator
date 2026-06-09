@@ -75,18 +75,38 @@ def _init_db(retries: int = 6, base_delay: int = 3) -> None:
 
 
 def _run_migrations(db):
-    """Apply additive schema changes that db.create_all() won't handle."""
+    """Apply additive schema changes that db.create_all() won't handle.
+
+    Each statement runs in its own transaction so a failure on one (e.g. SQLite
+    doesn't support IF NOT EXISTS, or a migration already applied) doesn't block
+    the rest.
+    """
     migrations = [
         "ALTER TABLE research_articles ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ",
         "ALTER TABLE research_articles ADD COLUMN IF NOT EXISTS source_name VARCHAR(256)",
         "ALTER TABLE research_articles ADD COLUMN IF NOT EXISTS source_domain VARCHAR(256)",
         "CREATE TABLE IF NOT EXISTS feedback (id SERIAL PRIMARY KEY, message TEXT NOT NULL, submitted_at TIMESTAMPTZ DEFAULT NOW())",
         "ALTER TABLE research_sessions ADD COLUMN IF NOT EXISTS search_params TEXT",
+        # Grid snapshot schema evolution: iso -> region + add region_type, source columns
+        """
+        DO $$ BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'osint_grid_snapshots' AND column_name = 'iso'
+          ) THEN
+            ALTER TABLE osint_grid_snapshots RENAME COLUMN iso TO region;
+          END IF;
+        END $$
+        """,
+        "ALTER TABLE osint_grid_snapshots ADD COLUMN IF NOT EXISTS region_type VARCHAR(16) NOT NULL DEFAULT 'iso'",
+        "ALTER TABLE osint_grid_snapshots ADD COLUMN IF NOT EXISTS source VARCHAR(32) NOT NULL DEFAULT 'gridstatus'",
+        "ALTER TABLE osint_grid_snapshots DROP CONSTRAINT IF EXISTS uq_osint_grid_snapshot",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_osint_grid_snapshot ON osint_grid_snapshots (region, timestamp, metric, fuel, source)",
     ]
-    try:
-        with db.engine.connect() as conn:
-            for sql in migrations:
+    for sql in migrations:
+        try:
+            with db.engine.connect() as conn:
                 conn.execute(db.text(sql))
-            conn.commit()
-    except Exception:
-        pass  # SQLite (local dev) doesn't support IF NOT EXISTS — safe to ignore
+                conn.commit()
+        except Exception:
+            pass

@@ -152,39 +152,71 @@ def osint_assets_ingest():
 
 @osint_bp.route("/api/osint/grid/current")
 def osint_grid_current():
-    """Return the most recent fuel-mix snapshot for each ISO."""
-    rows = db.session.execute(text("""
-        SELECT g.iso, g.timestamp, g.metric, g.fuel, g.value, g.unit
+    """Return the most recent snapshot per (region, source, metric, fuel).
+
+    Optional query params:
+      ?source=gridstatus|eia930   — filter to one source
+      ?region=ERCO                — filter to one BA/ISO region code
+      ?metric=fuel_mix_mw         — filter to one metric
+    """
+    source_filter = request.args.get("source")
+    region_filter = request.args.get("region")
+    metric_filter = request.args.get("metric")
+
+    where_parts: list[str] = []
+    params: dict[str, str] = {}
+    if source_filter:
+        where_parts.append("AND g.source = :source")
+        params["source"] = source_filter
+    if region_filter:
+        where_parts.append("AND g.region = :region")
+        params["region"] = region_filter
+    if metric_filter:
+        where_parts.append("AND g.metric = :metric")
+        params["metric"] = metric_filter
+    where_extra = " ".join(where_parts)
+
+    rows = db.session.execute(text(f"""
+        SELECT g.region, g.region_type, g.source, g.timestamp, g.metric, g.fuel, g.value, g.unit
         FROM osint_grid_snapshots g
         JOIN (
-            SELECT iso, metric, fuel, MAX(timestamp) AS max_ts
+            SELECT region, source, metric, fuel, MAX(timestamp) AS max_ts
             FROM osint_grid_snapshots
-            GROUP BY iso, metric, fuel
+            GROUP BY region, source, metric, fuel
         ) latest
-          ON g.iso       = latest.iso
+          ON g.region    = latest.region
+         AND g.source    = latest.source
          AND g.metric    = latest.metric
          AND g.fuel      = latest.fuel
          AND g.timestamp = latest.max_ts
-        ORDER BY g.iso, g.metric, g.fuel
-    """)).fetchall()
+        WHERE 1=1 {where_extra}
+        ORDER BY g.region, g.source, g.metric, g.fuel
+    """), params).fetchall()
 
     payload: dict[str, list[dict[str, Any]]] = {}
     for r in rows:
         ts = r.timestamp
         item = {
-            "timestamp": ts.isoformat() if isinstance(ts, datetime) else str(ts),
-            "metric":    r.metric,
-            "fuel":      r.fuel,
-            "value":     r.value,
-            "unit":      r.unit,
+            "region_type": r.region_type,
+            "source":      r.source,
+            "timestamp":   ts.isoformat() if isinstance(ts, datetime) else str(ts),
+            "metric":      r.metric,
+            "fuel":        r.fuel,
+            "value":       r.value,
+            "unit":        r.unit,
         }
-        payload.setdefault(r.iso, []).append(item)
+        payload.setdefault(r.region, []).append(item)
     return jsonify(payload)
 
 
 @osint_bp.route("/api/osint/grid/ingest", methods=["POST"])
 def osint_grid_ingest():
-    """Receive grid snapshot rows from the aggregator's push_grid.py GitHub Action."""
+    """Receive grid snapshot rows from aggregator push scripts.
+
+    Accepts unified row shape:
+      region, region_type, source, timestamp, metric, fuel, value, unit
+    Also accepts legacy `iso` field (maps to region; source defaults to gridstatus).
+    """
     if not _ingest_auth_ok():
         return jsonify({"error": "unauthorized"}), 401
 
@@ -195,13 +227,15 @@ def osint_grid_ingest():
 
     inserted = 0
     for row in rows:
-        iso    = row.get("iso", "")
-        metric = row.get("metric", "")
-        fuel   = str(row.get("fuel") or "")
-        value  = row.get("value")
-        unit   = row.get("unit")
+        region      = row.get("region") or row.get("iso", "")
+        region_type = row.get("region_type", "iso")
+        source      = row.get("source", "gridstatus")
+        metric      = row.get("metric", "")
+        fuel        = str(row.get("fuel") or "")
+        value       = row.get("value")
+        unit        = row.get("unit")
 
-        if not iso or value is None:
+        if not region or value is None:
             continue
 
         raw_ts = row.get("timestamp", "")
@@ -210,22 +244,23 @@ def osint_grid_ingest():
         except Exception:
             ts = datetime.utcnow()
 
-        # Use raw SQL so we get portable upsert behaviour on both SQLite (dev)
-        # and PostgreSQL (Render). The fuel column is NOT NULL so the unique
-        # index always has a defined value to match against.
         db_url = db.engine.url.drivername
         if "postgresql" in db_url or "postgres" in db_url:
             db.session.execute(text("""
-                INSERT INTO osint_grid_snapshots (iso, timestamp, metric, fuel, value, unit, metadata_json, created_at)
-                VALUES (:iso, :ts, :metric, :fuel, :value, :unit, '{}', NOW())
-                ON CONFLICT (iso, timestamp, metric, fuel) DO NOTHING
-            """), {"iso": iso, "ts": ts, "metric": metric, "fuel": fuel,
+                INSERT INTO osint_grid_snapshots
+                  (region, region_type, source, timestamp, metric, fuel, value, unit, metadata_json, created_at)
+                VALUES (:region, :region_type, :source, :ts, :metric, :fuel, :value, :unit, '{}', NOW())
+                ON CONFLICT (region, timestamp, metric, fuel, source) DO NOTHING
+            """), {"region": region, "region_type": region_type, "source": source,
+                   "ts": ts, "metric": metric, "fuel": fuel,
                    "value": float(value), "unit": unit or ""})
         else:
             db.session.execute(text("""
-                INSERT OR IGNORE INTO osint_grid_snapshots (iso, timestamp, metric, fuel, value, unit, metadata_json, created_at)
-                VALUES (:iso, :ts, :metric, :fuel, :value, :unit, '{}', datetime('now'))
-            """), {"iso": iso, "ts": ts, "metric": metric, "fuel": fuel,
+                INSERT OR IGNORE INTO osint_grid_snapshots
+                  (region, region_type, source, timestamp, metric, fuel, value, unit, metadata_json, created_at)
+                VALUES (:region, :region_type, :source, :ts, :metric, :fuel, :value, :unit, '{}', datetime('now'))
+            """), {"region": region, "region_type": region_type, "source": source,
+                   "ts": ts, "metric": metric, "fuel": fuel,
                    "value": float(value), "unit": unit or ""})
         inserted += 1
 

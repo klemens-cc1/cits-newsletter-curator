@@ -56,12 +56,14 @@ class OsintAsset(db.Model):
 class OsintGridSnapshot(db.Model):
     __tablename__ = "osint_grid_snapshots"
     __table_args__ = (
-        db.UniqueConstraint("iso", "timestamp", "metric", "fuel",
+        db.UniqueConstraint("region", "timestamp", "metric", "fuel", "source",
                             name="uq_osint_grid_snapshot"),
     )
 
-    id            = db.Column(db.Integer,  primary_key=True, autoincrement=True)
-    iso           = db.Column(db.String(16), nullable=False)
+    id            = db.Column(db.Integer,   primary_key=True, autoincrement=True)
+    region        = db.Column(db.String(16), nullable=False)   # EIA/NERC BA code e.g. ERCO, CISO, PJM
+    region_type   = db.Column(db.String(16), nullable=False, default="iso")  # "iso" or "ba"
+    source        = db.Column(db.String(32), nullable=False, default="gridstatus")
     timestamp     = db.Column(db.DateTime,   nullable=False)
     metric        = db.Column(db.String(64), nullable=False)
     fuel          = db.Column(db.String(64), nullable=False, default="")
@@ -72,14 +74,15 @@ class OsintGridSnapshot(db.Model):
                               default=lambda: datetime.now(timezone.utc))
 
     def to_dict(self):
-        import json as _json
         return {
-            "iso":       self.iso,
-            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
-            "metric":    self.metric,
-            "fuel":      self.fuel,
-            "value":     self.value,
-            "unit":      self.unit,
+            "region":      self.region,
+            "region_type": self.region_type,
+            "source":      self.source,
+            "timestamp":   self.timestamp.isoformat() if self.timestamp else None,
+            "metric":      self.metric,
+            "fuel":        self.fuel,
+            "value":       self.value,
+            "unit":        self.unit,
         }
 
 
