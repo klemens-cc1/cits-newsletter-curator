@@ -3,131 +3,488 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>OSINT Energy Security Dashboard</title>
+  <title>OSINT Energy Map — CITS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;500&family=Merriweather:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIINfQ97toznw4tLkzAhZ14PmIze9/0Tj4=" crossorigin="anonymous" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" integrity="sha384-pmjIAcz2bAn0xukfxADbZIb3t8oRT9Sv0rvO+BR5Csr6Dhqq+nZs59P0pPKQJkEV" crossorigin="anonymous" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" integrity="sha384-wgw+aLYNQ7dlhK47ZPK7FRACiq7ROZwgFNg0m04avm4CaXS+Z9Y7nMu8yNjBKYC+" crossorigin="anonymous" />
   <style>
-    *, *::before, *::after { box-sizing: border-box; }
-    html, body, #map { height: 100%; margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    #sidebar, #detail, #bottom { position: absolute; z-index: 500; background: rgba(11, 18, 32, 0.93); color: #f8fafc; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.35); backdrop-filter: blur(6px); }
-    #sidebar { top: 16px; left: 16px; width: 300px; max-height: calc(100% - 32px); overflow-y: auto; border-radius: 14px; padding: 16px; scrollbar-width: thin; scrollbar-color: #334155 transparent; }
-    #detail  { top: 16px; right: 16px; width: 320px; max-height: calc(100% - 180px); overflow-y: auto; border-radius: 14px; padding: 16px; display: none; scrollbar-width: thin; scrollbar-color: #334155 transparent; }
-    #bottom  { left: 332px; right: 332px; bottom: 16px; max-height: 160px; overflow-y: auto; border-radius: 14px; padding: 10px 14px; scrollbar-width: thin; scrollbar-color: #334155 transparent; }
-    h1 { font-size: 1.05rem; margin: 0 0 2px; font-weight: 700; letter-spacing: -.01em; }
-    h2 { font-size: 0.78rem; margin: 16px 0 6px; color: #93c5fd; text-transform: uppercase; letter-spacing: .1em; font-weight: 600; }
-    label { display: flex; align-items: center; gap: 8px; margin: 6px 0; cursor: pointer; font-size: .85rem; user-select: none; }
-    label input[type=checkbox] { accent-color: #3b82f6; width: 14px; height: 14px; cursor: pointer; }
-    button.close-btn { margin-top: 10px; border: 0; border-radius: 8px; padding: 7px 12px; background: #1e3a5f; color: #93c5fd; cursor: pointer; font-size: .82rem; width: 100%; }
-    button.close-btn:hover { background: #2563eb; color: white; }
-    .muted { color: #94a3b8; font-size: 0.82rem; }
-    .grid-card  { border-top: 1px solid rgba(148, 163, 184, .18); padding: 8px 0; }
-    .news-item  { border-top: 1px solid rgba(148, 163, 184, .18); padding: 6px 0; }
-    .pill { display: inline-block; border-radius: 999px; padding: 2px 8px; margin: 2px 2px 2px 0; background: rgba(59, 130, 246, .18); color: #bfdbfe; font-size: .72rem; cursor: pointer; user-select: none; transition: background .15s; }
-    .pill:hover, .pill.active { background: rgba(59, 130, 246, .4); }
-    .pill.ics  { background: rgba(239, 68, 68, .18); color: #fca5a5; }
-    .pill.ics:hover,  .pill.ics.active  { background: rgba(239, 68, 68, .4); }
-    .pill.nrc  { background: rgba(168, 85, 247, .18); color: #d8b4fe; }
-    .pill.nrc:hover,  .pill.nrc.active  { background: rgba(168, 85, 247, .4); }
-    .empty { color: #475569; font-style: italic; font-size: .82rem; }
-    a { color: #93c5fd; text-decoration: none; }
-    a:hover { text-decoration: underline; }
-    #status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #64748b; margin-right: 5px; vertical-align: middle; }
-    #status-dot.live  { background: #22c55e; }
-    #status-dot.error { background: #ef4444; }
-    .detail-row   { margin: 5px 0; }
-    .detail-label { font-size: .72rem; color: #64748b; text-transform: uppercase; letter-spacing: .06em; }
-    .detail-value { font-size: .88rem; color: #e2e8f0; }
-    .flag-warn { color: #f87171; font-size: .82rem; margin-top: 8px; background: rgba(239,68,68,.1); border-radius: 6px; padding: 6px 8px; }
-    .swatch { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-    .fuel-bar-track { flex: 1; height: 5px; background: rgba(255,255,255,.08); border-radius: 3px; overflow: hidden; }
-    .fuel-bar-fill  { height: 100%; border-radius: 3px; }
-    .bottom-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
-    .layer-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    :root {
+      --red:       #ba0c2f;
+      --charcoal:  #252525;
+      --mid:       #3a3a3a;
+      --gray:      #909090;
+      --muted:     #555;
+      --border:    #383838;
+      --panel-bg:  rgba(22, 22, 22, 0.96);
+      --white:     #ffffff;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Merriweather', Georgia, serif;
+      background: var(--charcoal);
+      color: var(--white);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────── */
+    header {
+      background: var(--charcoal);
+      padding: 0 20px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      height: 52px;
+      flex-shrink: 0;
+      z-index: 1000;
+      border-top: 3px solid var(--red);
+      box-shadow: 0 2px 12px rgba(0,0,0,0.6);
+    }
+    .header-title {
+      font-family: 'Oswald', sans-serif;
+      font-size: 17px;
+      font-weight: 500;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: var(--red);
+      line-height: 1;
+    }
+    .header-sub {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .header-divider { width: 1px; height: 20px; background: var(--border); flex-shrink: 0; }
+    .header-spacer  { flex: 1; }
+    .nav-link {
+      font-family: 'Oswald', sans-serif;
+      font-size: 11px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: #666;
+      text-decoration: none;
+      padding: 4px 10px;
+      border: 1px solid var(--border);
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .nav-link:hover { color: #ccc; border-color: #555; }
+    .nav-link.active { color: var(--white); border-color: var(--red); background: rgba(186,12,47,0.18); }
+    .wip-badge {
+      font-family: 'Oswald', sans-serif;
+      font-size: 9px;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: var(--red);
+      border: 1px solid rgba(186,12,47,0.4);
+      padding: 3px 8px;
+      opacity: 0.8;
+    }
+
+    /* ── Map wrap ────────────────────────────────────────────────────── */
+    #map-wrap { flex: 1; position: relative; overflow: hidden; }
+    #map      { position: absolute; inset: 0; }
+
+    /* ── Panels ──────────────────────────────────────────────────────── */
+    .panel {
+      position: absolute;
+      z-index: 500;
+      background: var(--panel-bg);
+      border: 1px solid var(--border);
+      border-top: 2px solid var(--red);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+
+    #sidebar {
+      top: 12px; left: 12px;
+      width: 236px;
+      max-height: calc(100% - 24px);
+      overflow-y: auto;
+      padding: 14px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+    #detail {
+      top: 12px; right: 12px;
+      width: 272px;
+      max-height: calc(100% - 140px);
+      overflow-y: auto;
+      padding: 14px;
+      display: none;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+    #bottom {
+      left: 260px; right: 296px; bottom: 12px;
+      max-height: 136px;
+      overflow-y: hidden;
+      padding: 10px 14px;
+    }
+
+    /* ── Panel typography ────────────────────────────────────────────── */
+    .panel-eyebrow {
+      font-family: 'Oswald', sans-serif;
+      font-size: 9px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--red);
+      margin-bottom: 8px;
+    }
+    .section-head {
+      font-family: 'Oswald', sans-serif;
+      font-size: 9px;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 12px 0 5px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 4px;
+    }
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 1px;
+      color: var(--muted);
+      margin-bottom: 2px;
+    }
+    #status-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+      transition: background 0.3s, box-shadow 0.3s;
+    }
+    #status-dot.live  { background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,0.6); }
+    #status-dot.error { background: var(--red); }
+
+    /* ── Layer controls ──────────────────────────────────────────────── */
+    .layer-row {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 0;
+      cursor: pointer;
+      font-family: 'Oswald', sans-serif;
+      font-size: 11px;
+      letter-spacing: 0.5px;
+      color: #888;
+      user-select: none;
+      transition: color 0.12s;
+    }
+    .layer-row:hover { color: var(--white); }
+    .layer-row input[type=checkbox] {
+      width: 12px; height: 12px;
+      accent-color: var(--red);
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .layer-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .layer-count { margin-left: auto; font-size: 9px; color: #444; font-family: 'Oswald', sans-serif; letter-spacing: 0.5px; }
+
+    /* ── Grid cards ──────────────────────────────────────────────────── */
+    .grid-card { border-top: 1px solid var(--border); padding: 7px 0; }
+    .grid-card-hdr {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 4px;
+    }
+    .grid-iso {
+      font-family: 'Oswald', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: 1.5px;
+      color: var(--white);
+    }
+    .grid-ts {
+      font-family: 'Oswald', sans-serif;
+      font-size: 9px;
+      letter-spacing: 0.5px;
+      color: #444;
+    }
+    .fuel-row  { display: flex; align-items: center; gap: 5px; margin: 2px 0; }
+    .fuel-dot  { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .fuel-name {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      color: #888;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .fuel-track { width: 44px; height: 3px; background: rgba(255,255,255,0.06); flex-shrink: 0; }
+    .fuel-fill  { height: 100%; }
+    .fuel-pct   { font-family: 'Oswald', sans-serif; font-size: 9px; color: #444; width: 26px; text-align: right; }
+    .grid-total { font-family: 'Oswald', sans-serif; font-size: 9px; letter-spacing: 0.5px; color: #3a3a3a; margin-top: 3px; }
+
+    /* ── Detail panel ────────────────────────────────────────────────── */
+    .detail-type {
+      font-family: 'Oswald', sans-serif;
+      font-size: 9px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--red);
+      margin-bottom: 4px;
+    }
+    .detail-name {
+      font-family: 'Oswald', sans-serif;
+      font-size: 15px;
+      font-weight: 500;
+      letter-spacing: 0.5px;
+      color: var(--white);
+      line-height: 1.2;
+      margin-bottom: 12px;
+    }
+    .detail-row   { margin: 6px 0; }
+    .detail-label {
+      font-family: 'Oswald', sans-serif;
+      font-size: 9px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 1px;
+    }
+    .detail-value {
+      font-family: 'Merriweather', serif;
+      font-size: 11px;
+      color: #ccc;
+    }
+    .flag-warn {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 1px;
+      color: var(--red);
+      border: 1px solid rgba(186,12,47,0.35);
+      padding: 6px 8px;
+      margin-top: 10px;
+    }
+    .close-btn {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--gray);
+      cursor: pointer;
+      padding: 6px 12px;
+      width: 100%;
+      margin-top: 12px;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .close-btn:hover { border-color: var(--red); color: var(--white); }
+
+    /* ── News strip ──────────────────────────────────────────────────── */
+    .bottom-hdr {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .bottom-title {
+      font-family: 'Oswald', sans-serif;
+      font-size: 9px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--gray);
+      white-space: nowrap;
+    }
+    .filter-pill {
+      font-family: 'Oswald', sans-serif;
+      font-size: 9px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      cursor: pointer;
+      user-select: none;
+      transition: color 0.12s, border-color 0.12s, background 0.12s;
+    }
+    .filter-pill:hover { color: var(--gray); border-color: #555; }
+    .filter-pill.active { color: var(--white); border-color: var(--red); background: rgba(186,12,47,0.15); }
+    .filter-pill.ics.active { border-color: #ef4444; background: rgba(239,68,68,0.12); color: #fca5a5; }
+    .filter-pill.nrc.active { border-color: #a855f7; background: rgba(168,85,247,0.12); color: #d8b4fe; }
+
+    #news-list {
+      display: flex;
+      gap: 14px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+    .news-card {
+      min-width: 196px;
+      max-width: 236px;
+      flex-shrink: 0;
+      border-left: 2px solid var(--border);
+      padding-left: 8px;
+    }
+    .news-card a {
+      font-family: 'Merriweather', serif;
+      font-size: 11px;
+      line-height: 1.45;
+      color: #bbb;
+      text-decoration: none;
+      display: block;
+      margin-bottom: 3px;
+    }
+    .news-card a:hover { color: var(--white); }
+    .news-meta {
+      font-family: 'Oswald', sans-serif;
+      font-size: 9px;
+      letter-spacing: 0.5px;
+      color: #444;
+    }
+
+    .empty {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 1.5px;
+      color: #3a3a3a;
+    }
+
+    /* ── Leaflet overrides ───────────────────────────────────────────── */
+    .leaflet-control-attribution {
+      background: rgba(22,22,22,0.85) !important;
+      color: #3a3a3a !important;
+      font-size: 9px !important;
+      font-family: 'Oswald', sans-serif !important;
+    }
+    .leaflet-control-attribution a { color: #444 !important; }
+    .leaflet-control-zoom a {
+      background: var(--panel-bg) !important;
+      border-color: var(--border) !important;
+      color: var(--gray) !important;
+      font-family: 'Oswald', sans-serif !important;
+    }
+    .leaflet-control-zoom a:hover { background: var(--mid) !important; color: var(--white) !important; }
+    .leaflet-popup-content-wrapper {
+      background: var(--panel-bg) !important;
+      border: 1px solid var(--border) !important;
+      border-top: 2px solid var(--red) !important;
+      border-radius: 0 !important;
+      color: var(--white) !important;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5) !important;
+    }
+    .leaflet-popup-tip { background: var(--panel-bg) !important; }
+    .leaflet-popup-close-button { color: var(--muted) !important; font-family: 'Oswald', sans-serif !important; }
   </style>
 </head>
 <body>
-<div id="map"></div>
 
-<!-- Left sidebar: layer controls + ISO grid status -->
-<div id="sidebar">
-  <h1>⚡ Energy Security</h1>
-  <div class="muted" style="font-size:.78rem;margin-bottom:2px">
-    <span id="status-dot"></span><span id="status-text">Connecting…</span>
+<header>
+  <div class="header-title">CITS</div>
+  <div class="header-divider"></div>
+  <div class="header-sub">OSINT Map</div>
+  <div class="header-divider"></div>
+  <a href="/" class="nav-link">Home</a>
+  <a href="/newsletter" class="nav-link">Newsletter</a>
+  <a href="/research" class="nav-link">Research</a>
+  <a href="/history" class="nav-link">History</a>
+  <div class="header-spacer"></div>
+  <span class="wip-badge">Work in Progress</span>
+</header>
+
+<div id="map-wrap">
+  <div id="map"></div>
+
+  <!-- Left: layer controls + grid status -->
+  <div class="panel" id="sidebar">
+    <div class="panel-eyebrow">Energy Security</div>
+    <div class="status-row">
+      <span id="status-dot"></span>
+      <span id="status-text">Connecting…</span>
+    </div>
+
+    <div class="section-head">Infrastructure Layers</div>
+
+    <label class="layer-row">
+      <input type="checkbox" id="lyr-power_plant" checked>
+      <span class="layer-dot" style="background:#f59e0b"></span>
+      Power Plants
+      <span class="layer-count" id="cnt-power_plant"></span>
+    </label>
+    <label class="layer-row">
+      <input type="checkbox" id="lyr-data_center">
+      <span class="layer-dot" style="background:#38bdf8"></span>
+      Data Centers
+      <span class="layer-count" id="cnt-data_center"></span>
+    </label>
+    <label class="layer-row">
+      <input type="checkbox" id="lyr-substation">
+      <span class="layer-dot" style="background:#eab308"></span>
+      Substations
+      <span class="layer-count" id="cnt-substation"></span>
+    </label>
+    <label class="layer-row">
+      <input type="checkbox" id="lyr-pipeline">
+      <span class="layer-dot" style="background:#22c55e"></span>
+      Pipelines
+      <span class="layer-count" id="cnt-pipeline"></span>
+    </label>
+    <label class="layer-row">
+      <input type="checkbox" id="lyr-incidents" checked>
+      <span class="layer-dot" style="background:#ba0c2f"></span>
+      Incidents (90d)
+      <span class="layer-count" id="cnt-incidents"></span>
+    </label>
+
+    <div class="section-head">Grid Status</div>
+    <div id="grid-panel"><p class="empty">No grid data yet.</p></div>
   </div>
 
-  <h2>Layers</h2>
-  <label>
-    <span class="layer-dot" style="background:#f59e0b"></span>
-    <input type="checkbox" id="lyr-power_plant" checked> Power Plants
-    <span class="muted" id="cnt-power_plant" style="margin-left:auto;font-size:.75rem"></span>
-  </label>
-  <label>
-    <span class="layer-dot" style="background:#38bdf8"></span>
-    <input type="checkbox" id="lyr-data_center"> Data Centers
-    <span class="muted" id="cnt-data_center" style="margin-left:auto;font-size:.75rem"></span>
-  </label>
-  <label>
-    <span class="layer-dot" style="background:#eab308"></span>
-    <input type="checkbox" id="lyr-substation"> Substations
-    <span class="muted" id="cnt-substation" style="margin-left:auto;font-size:.75rem"></span>
-  </label>
-  <label>
-    <span class="layer-dot" style="background:#22c55e"></span>
-    <input type="checkbox" id="lyr-pipeline"> Pipelines
-    <span class="muted" id="cnt-pipeline" style="margin-left:auto;font-size:.75rem"></span>
-  </label>
-  <label>
-    <span class="layer-dot" style="background:#ef4444"></span>
-    <input type="checkbox" id="lyr-incidents" checked> Incidents (90d)
-    <span class="muted" id="cnt-incidents" style="margin-left:auto;font-size:.75rem"></span>
-  </label>
-
-  <h2>Grid Status</h2>
-  <div id="grid-panel"><p class="empty">No grid data yet.</p></div>
-</div>
-
-<!-- Right panel: asset detail -->
-<div id="detail">
-  <h2 id="detail-type" style="margin-top:0"></h2>
-  <div id="detail-name" style="font-size:1rem;font-weight:600;margin-bottom:10px;color:#f1f5f9"></div>
-  <div id="detail-body"></div>
-  <button class="close-btn" onclick="closeDetail()">Close</button>
-</div>
-
-<!-- Bottom strip: news + incident feed -->
-<div id="bottom">
-  <div class="bottom-header">
-    <strong style="font-size:.82rem;white-space:nowrap">Recent Intelligence</strong>
-    <span class="pill active" id="f-all"         onclick="filterNews('all')">All</span>
-    <span class="pill ics"   id="f-ics_advisory" onclick="filterNews('ics_advisory')">Cyber/ICS</span>
-    <span class="pill nrc"   id="f-nrc_event"    onclick="filterNews('nrc_event')">Nuclear</span>
+  <!-- Right: asset detail -->
+  <div class="panel" id="detail">
+    <div class="detail-type"  id="detail-type"></div>
+    <div class="detail-name"  id="detail-name"></div>
+    <div id="detail-body"></div>
+    <button class="close-btn" onclick="closeDetail()">✕ &nbsp;Close</button>
   </div>
-  <div id="news-list" style="display:flex;gap:16px;overflow-x:auto;padding-bottom:4px">
-    <span class="empty">Loading…</span>
+
+  <!-- Bottom: news strip -->
+  <div class="panel" id="bottom">
+    <div class="bottom-hdr">
+      <span class="bottom-title">Recent Intelligence</span>
+      <span class="filter-pill active" id="f-all"         onclick="filterNews('all')">All</span>
+      <span class="filter-pill ics"   id="f-ics_advisory" onclick="filterNews('ics_advisory')">Cyber / ICS</span>
+      <span class="filter-pill nrc"   id="f-nrc_event"    onclick="filterNews('nrc_event')">Nuclear</span>
+    </div>
+    <div id="news-list"><span class="empty">Loading…</span></div>
   </div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV/XN2GGnk=" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" integrity="sha384-eXVCORTRlv4FUUgS/xmOyr66XBVraen8ATNLMESp92FKXLAMiKkerixTiBvXriZr" crossorigin="anonymous"></script>
 <script>
-// API base is empty — all fetch() calls use relative URLs so this works
-// identically in local Flask dev and on Render.
 const API = '';
 
-// ── Map ────────────────────────────────────────────────────────────────────
+// Dark Carto tiles — cohesive with the dark panel aesthetic
 const map = L.map('map', { zoomControl: true }).setView([38.5, -96], 4);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_matter/{z}/{x}/{y}{r}.png', {
+  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a>',
+  subdomains: 'abcd',
   maxZoom: 19,
 }).addTo(map);
 
-// ── Config ─────────────────────────────────────────────────────────────────
 const ASSET_CFG = {
-  power_plant:  { color: '#f59e0b', radius: 5, label: 'Power Plant'  },
-  data_center:  { color: '#38bdf8', radius: 6, label: 'Data Center'  },
-  substation:   { color: '#eab308', radius: 4, label: 'Substation'   },
-  pipeline:     { color: '#22c55e', radius: 4, label: 'Pipeline'     },
+  power_plant: { color: '#f59e0b', radius: 5, label: 'Power Plant' },
+  data_center: { color: '#38bdf8', radius: 6, label: 'Data Center' },
+  substation:  { color: '#eab308', radius: 4, label: 'Substation'  },
+  pipeline:    { color: '#22c55e', radius: 4, label: 'Pipeline'    },
 };
 
 const FUEL_COLORS = {
@@ -142,7 +499,6 @@ const FUEL_COLORS = {
   'Other':       '#94a3b8', 'Other Renewables': '#6ee7b7',
 };
 
-// ── Layer registry ─────────────────────────────────────────────────────────
 const layers = {};
 
 function getOrCreateLayer(type) {
@@ -154,7 +510,6 @@ function getOrCreateLayer(type) {
   return layers[type];
 }
 
-// ── Status helpers ─────────────────────────────────────────────────────────
 function setStatus(text, state) {
   document.getElementById('status-text').textContent = text;
   document.getElementById('status-dot').className = state || '';
@@ -165,18 +520,19 @@ function setCount(type, n) {
   if (el) el.textContent = n > 0 ? n.toLocaleString() : '';
 }
 
-// ── Asset layer rendering ──────────────────────────────────────────────────
+// ── Asset layers ────────────────────────────────────────────────────────────
+
 async function loadLayer(type) {
-  const checkbox = document.getElementById(`lyr-${type}`);
+  const cb  = document.getElementById(`lyr-${type}`);
   const cfg = ASSET_CFG[type] || { color: '#94a3b8', radius: 4, label: type };
-  const layer = getOrCreateLayer(type);
-  layer.clearLayers();
+  const lyr = getOrCreateLayer(type);
+  lyr.clearLayers();
 
   let data;
   try {
     const r = await fetch(`${API}/api/osint/assets?type=${type}&limit=10000`);
     data = await r.json();
-  } catch (e) { return 0; }
+  } catch { return 0; }
 
   const features = data.features || [];
   features.forEach(f => {
@@ -186,60 +542,86 @@ async function loadLayer(type) {
     if (!lat || !lng) return;
     const marker = L.circleMarker([lat, lng], {
       radius: cfg.radius, color: cfg.color, fillColor: cfg.color,
-      fillOpacity: 0.75, weight: 1, opacity: 0.9,
+      fillOpacity: 0.78, weight: 1, opacity: 0.9,
     });
     marker.on('click', () => showDetail(f, cfg));
-    layer.addLayer(marker);
+    lyr.addLayer(marker);
   });
 
-  if (checkbox && checkbox.checked) map.addLayer(layer);
+  if (cb && cb.checked) map.addLayer(lyr);
   setCount(type, features.length);
   return features.length;
 }
 
-// ── Incident rendering ─────────────────────────────────────────────────────
 async function loadIncidents() {
-  const layer = getOrCreateLayer('incidents');
-  layer.clearLayers();
+  const lyr = getOrCreateLayer('incidents');
+  lyr.clearLayers();
+
   let rows;
   try {
     const r = await fetch(`${API}/api/osint/incidents?days=90`);
     rows = await r.json();
-  } catch (e) { return 0; }
+  } catch { return 0; }
 
   const geoRows = rows.filter(i => i.lat && i.lng);
   geoRows.forEach(inc => {
     const severity = inc.fatalities > 0 ? 9 : inc.injuries > 0 ? 7 : 5;
     const circle = L.circleMarker([inc.lat, inc.lng], {
-      radius: severity, color: '#ef4444', fillColor: '#ef4444',
-      fillOpacity: 0.4, weight: 2, opacity: 0.85,
+      radius: severity, color: '#ba0c2f', fillColor: '#ba0c2f',
+      fillOpacity: 0.35, weight: 2, opacity: 0.8,
     });
-    const popup = document.createElement('div');
-    const heading = document.createElement('strong');
-    heading.textContent = inc.type || inc.source || '';
-    popup.appendChild(heading);
-    if (inc.date) { popup.appendChild(document.createElement('br')); popup.appendChild(document.createTextNode(inc.date)); }
-    if (inc.operator) { popup.appendChild(document.createElement('br')); popup.appendChild(document.createTextNode(inc.operator)); }
-    if (inc.description) {
-      popup.appendChild(document.createElement('br'));
-      const sm = document.createElement('span'); sm.style.fontSize = '.85em';
-      sm.textContent = inc.description.slice(0, 120);
-      popup.appendChild(sm);
+
+    const el = document.createElement('div');
+    el.style.cssText = 'font-family:Oswald,sans-serif;min-width:160px;max-width:220px';
+    const hd = document.createElement('div');
+    hd.style.cssText = 'font-size:10px;letter-spacing:2px;color:#ba0c2f;text-transform:uppercase;margin-bottom:5px';
+    hd.textContent = inc.type || inc.source || '';
+    el.appendChild(hd);
+    if (inc.date) {
+      const d = document.createElement('div');
+      d.style.cssText = 'font-size:11px;color:#888;margin-bottom:2px';
+      d.textContent = inc.date;
+      el.appendChild(d);
     }
-    circle.bindPopup(popup);
-    layer.addLayer(circle);
+    if (inc.operator) {
+      const d = document.createElement('div');
+      d.style.cssText = 'font-size:12px;color:#ddd';
+      d.textContent = inc.operator;
+      el.appendChild(d);
+    }
+    if (inc.description) {
+      const d = document.createElement('div');
+      d.style.cssText = 'font-family:Merriweather,serif;font-size:11px;color:#999;margin-top:5px;line-height:1.4';
+      d.textContent = inc.description.slice(0, 120);
+      el.appendChild(d);
+    }
+    circle.bindPopup(el);
+    lyr.addLayer(circle);
   });
 
-  if (document.getElementById('lyr-incidents').checked) map.addLayer(layer);
+  if (document.getElementById('lyr-incidents').checked) map.addLayer(lyr);
   setCount('incidents', geoRows.length);
   return geoRows.length;
 }
 
-// ── Asset detail panel ─────────────────────────────────────────────────────
+// ── Layer checkboxes ────────────────────────────────────────────────────────
+
+document.querySelectorAll('input[id^="lyr-"]').forEach(cb => {
+  cb.addEventListener('change', () => {
+    const type = cb.id.replace('lyr-', '');
+    const lyr  = layers[type];
+    if (!lyr) return;
+    if (cb.checked) map.addLayer(lyr); else map.removeLayer(lyr);
+  });
+});
+
+// ── Detail panel ────────────────────────────────────────────────────────────
+
 function showDetail(feature, cfg) {
   const p = feature.properties;
-  document.getElementById('detail-type').textContent  = (cfg && cfg.label) || p.type || 'Asset';
-  document.getElementById('detail-name').textContent  = p.name || '(unnamed)';
+  document.getElementById('detail-type').textContent = (cfg && cfg.label) || p.type || 'Asset';
+  document.getElementById('detail-name').textContent = p.name || '(unnamed)';
+
   const fields = [
     ['State',    p.state],
     ['County',   p.county],
@@ -257,12 +639,12 @@ function showDetail(feature, cfg) {
     const row = document.createElement('div'); row.className = 'detail-row';
     const lbl = document.createElement('div'); lbl.className = 'detail-label'; lbl.textContent = label;
     const val = document.createElement('div'); val.className = 'detail-value'; val.textContent = value;
-    row.appendChild(lbl); row.appendChild(val);
+    row.append(lbl, val);
     body.appendChild(row);
   });
   if (p.foreign_link_flag) {
     const warn = document.createElement('div'); warn.className = 'flag-warn';
-    warn.textContent = '⚠ Foreign ownership flag — review ownership chain';
+    warn.textContent = '⚠  Foreign ownership flag — review ownership chain';
     body.appendChild(warn);
   }
   document.getElementById('detail').style.display = 'block';
@@ -270,20 +652,11 @@ function showDetail(feature, cfg) {
 
 function closeDetail() { document.getElementById('detail').style.display = 'none'; }
 
-// ── Layer toggle checkboxes ────────────────────────────────────────────────
-document.querySelectorAll('input[id^="lyr-"]').forEach(cb => {
-  cb.addEventListener('change', () => {
-    const type = cb.id.replace('lyr-', '');
-    const layer = layers[type];
-    if (!layer) return;
-    if (cb.checked) map.addLayer(layer); else map.removeLayer(layer);
-  });
-});
+// ── Grid panel ──────────────────────────────────────────────────────────────
 
-// ── Grid telemetry panel ───────────────────────────────────────────────────
-function _mkEl(tag, style, text) {
+function _el(tag, cls, text) {
   const el = document.createElement(tag);
-  if (style) el.style.cssText = style;
+  if (cls)  el.className   = cls;
   if (text !== undefined) el.textContent = text;
   return el;
 }
@@ -294,72 +667,70 @@ async function loadGrid() {
   try {
     const r = await fetch(`${API}/api/osint/grid/current`);
     data = await r.json();
-  } catch (e) {
-    const p = _mkEl('p', null, 'Grid data unavailable.'); p.className = 'empty';
-    panel.replaceChildren(p); return;
+  } catch {
+    panel.replaceChildren(_el('p', 'empty', 'Grid data unavailable.'));
+    return;
   }
   const isos = Object.keys(data);
   if (!isos.length) {
-    const p = _mkEl('p', null, 'No grid snapshots yet — workflow pending.'); p.className = 'empty';
-    panel.replaceChildren(p); return;
+    panel.replaceChildren(_el('p', 'empty', 'No grid snapshots yet.'));
+    return;
   }
 
   panel.replaceChildren();
   isos.forEach(iso => {
     const rows  = data[iso].filter(r => r.metric === 'fuel_mix_mw' && r.fuel);
     const total = rows.reduce((s, r) => s + r.value, 0);
-    const top   = rows.sort((a, b) => b.value - a.value).slice(0, 6);
+    const top   = [...rows].sort((a, b) => b.value - a.value).slice(0, 5);
     const ts    = rows[0]?.timestamp
-      ? new Date(rows[0].timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+      ? new Date(rows[0].timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : '';
 
-    const card = _mkEl('div'); card.className = 'grid-card';
-    const hdr = _mkEl('div', 'display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px');
-    hdr.appendChild(_mkEl('span', 'font-size:.84rem;font-weight:600', iso));
-    const tsEl = _mkEl('span', 'font-size:.7rem', ts); tsEl.className = 'muted';
-    hdr.appendChild(tsEl); card.appendChild(hdr);
+    const card = _el('div', 'grid-card');
+    const hdr  = _el('div', 'grid-card-hdr');
+    hdr.append(_el('span', 'grid-iso', iso), _el('span', 'grid-ts', ts));
+    card.appendChild(hdr);
 
     if (!top.length) {
-      const em = _mkEl('span', 'font-size:.72rem', 'No data'); em.className = 'empty';
-      card.appendChild(em);
+      card.appendChild(_el('span', 'empty', 'No data'));
     } else {
       top.forEach(r => {
         const pct = total > 0 ? (r.value / total * 100) : 0;
         const col = FUEL_COLORS[r.fuel] || '#94a3b8';
-        const barRow = _mkEl('div', 'display:flex;align-items:center;gap:5px;margin:2px 0');
-        const swatch = _mkEl('span'); swatch.className = 'swatch'; swatch.style.background = col;
-        const lbl = _mkEl('span', 'font-size:.72rem;flex:1;color:#cbd5e1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', r.fuel);
-        const track = _mkEl('div'); track.className = 'fuel-bar-track'; track.style.width = '50px';
-        const fill = _mkEl('div'); fill.className = 'fuel-bar-fill'; fill.style.width = pct.toFixed(1) + '%'; fill.style.background = col;
-        track.appendChild(fill);
-        const pctEl = _mkEl('span', 'font-size:.7rem;color:#94a3b8;width:28px;text-align:right', pct.toFixed(0) + '%');
-        barRow.appendChild(swatch); barRow.appendChild(lbl); barRow.appendChild(track); barRow.appendChild(pctEl);
-        card.appendChild(barRow);
+        const row = _el('div', 'fuel-row');
+        const dot = _el('span', 'fuel-dot'); dot.style.background = col;
+        const nm  = _el('span', 'fuel-name', r.fuel);
+        const trk = _el('div', 'fuel-track');
+        const fil = _el('div', 'fuel-fill'); fil.style.cssText = `width:${pct.toFixed(1)}%;background:${col}`;
+        trk.appendChild(fil);
+        const pc  = _el('span', 'fuel-pct', pct.toFixed(0) + '%');
+        row.append(dot, nm, trk, pc);
+        card.appendChild(row);
       });
+      card.appendChild(_el('div', 'grid-total', (total / 1000).toFixed(1) + ' GW total'));
     }
-
-    card.appendChild(_mkEl('div', 'font-size:.7rem;color:#475569;margin-top:3px', (total / 1000).toFixed(1) + ' GW total'));
     panel.appendChild(card);
   });
 }
 
-// ── News strip ─────────────────────────────────────────────────────────────
+// ── News strip ──────────────────────────────────────────────────────────────
+
 let allNews = [];
 let activeFilter = 'all';
 
 async function loadNews() {
   try {
     const r = await fetch(`${API}/api/osint/news?limit=60`);
-    allNews  = await r.json();
+    allNews = await r.json();
     if (!Array.isArray(allNews)) allNews = [];
-  } catch (e) { allNews = []; }
+  } catch { allNews = []; }
   renderNews();
 }
 
 function filterNews(cat) {
   activeFilter = cat;
   document.querySelectorAll('[id^="f-"]').forEach(el => el.classList.remove('active'));
-  const key = cat === 'all' ? 'f-all' : `f-${cat}`;
-  document.getElementById(key)?.classList.add('active');
+  document.getElementById(cat === 'all' ? 'f-all' : `f-${cat}`)?.classList.add('active');
   renderNews();
 }
 
@@ -368,67 +739,57 @@ function renderNews() {
   const items = activeFilter === 'all' ? allNews : allNews.filter(a => a.category === activeFilter);
   list.replaceChildren();
   if (!items.length) {
-    const empty = document.createElement('span'); empty.className = 'empty'; empty.textContent = 'No items';
-    list.appendChild(empty); return;
+    list.appendChild(_el('span', 'empty', 'No items')); return;
   }
   items.slice(0, 25).forEach(a => {
-    const card = document.createElement('div');
-    card.className = 'news-item';
-    card.style.cssText = 'min-width:220px;max-width:260px;flex-shrink:0';
-
     let safeHref = '#';
     try {
-      const parsed = new URL(a.url || '');
-      if (parsed.protocol === 'https:' || parsed.protocol === 'http:') safeHref = parsed.href;
+      const p = new URL(a.url || '');
+      if (p.protocol === 'https:' || p.protocol === 'http:') safeHref = p.href;
     } catch (_) {}
-
+    const card = _el('div', 'news-card');
     const link = document.createElement('a');
     link.href = safeHref; link.target = '_blank'; link.rel = 'noopener';
-    link.style.cssText = 'font-size:.78rem;line-height:1.4;display:block;margin-bottom:3px';
     link.textContent = a.title || '(untitled)';
-    card.appendChild(link);
-
-    if (a.category) {
-      const catClass = a.category === 'ics_advisory' ? 'ics' : a.category === 'nrc_event' ? 'nrc' : '';
-      const pill = document.createElement('span');
-      pill.className = `pill ${catClass}`; pill.style.cursor = 'default';
-      pill.textContent = a.category;
-      card.appendChild(pill);
-    }
-
-    const meta = document.createElement('span'); meta.className = 'muted'; meta.style.fontSize = '.7rem';
-    const dt = a.published_at
-      ? new Date(a.published_at).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+    const meta = _el('div', 'news-meta');
+    const dt   = a.published_at ? new Date(a.published_at).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
     meta.textContent = (a.feed_name || '') + (dt ? ' · ' + dt : '');
-    card.appendChild(meta);
-
+    card.append(link, meta);
     list.appendChild(card);
   });
 }
 
-// ── Boot ───────────────────────────────────────────────────────────────────
+// ── Boot ────────────────────────────────────────────────────────────────────
+
 async function init() {
   setStatus('Connecting…', '');
 
-  try {
-    await fetch(`${API}/api/osint/health`);
-  } catch (e) {
+  // The /api/osint/health call triggers lazy DB init on first deploy — it may
+  // take up to 30 s. Retry up to 6 times at 5 s intervals before giving up.
+  let dbReady = false;
+  for (let i = 0; i < 6; i++) {
+    try {
+      const r = await fetch(`${API}/api/osint/health`);
+      const j = await r.json();
+      if (j.db) { dbReady = true; break; }
+    } catch (_) {}
+    if (i < 5) await new Promise(res => setTimeout(res, 5000));
+  }
+
+  if (!dbReady) {
     setStatus('Service unavailable', 'error');
-    document.getElementById('grid-panel').innerHTML = '<p class="empty">Could not reach API.</p>';
-    document.getElementById('news-list').innerHTML  = '<span class="empty">API unavailable</span>';
+    document.getElementById('grid-panel').replaceChildren(_el('p', 'empty', 'Could not reach API.'));
+    document.getElementById('news-list').replaceChildren(_el('span', 'empty', 'API unavailable'));
     return;
   }
 
-  setStatus('Loading power plants…', '');
+  setStatus('Loading…', '');
+
   await loadLayer('power_plant');
-
-  setStatus('Loading data centers…', '');
   await loadLayer('data_center');
-
-  setStatus('Loading incidents…', '');
   await loadIncidents();
 
-  // Substations + pipelines are large — lazy-load on first toggle
+  // Substations + pipelines are large — lazy on first toggle
   document.getElementById('lyr-substation').addEventListener('change', async function () {
     if (this.checked && (!layers.substation || layers.substation.getLayers().length === 0)) {
       setStatus('Loading substations…', '');
@@ -445,12 +806,8 @@ async function init() {
     }
   }, { once: true });
 
-  setStatus('Loading grid data…', '');
   await loadGrid();
-
-  setStatus('Loading news…', '');
   await loadNews();
-
   setStatus('Live', 'live');
 }
 
