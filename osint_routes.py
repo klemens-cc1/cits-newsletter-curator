@@ -241,9 +241,7 @@ def osint_incidents():
     since = date.today() - timedelta(days=days)
     rows  = (
         OsintIncident.query
-        .filter(
-            (OsintIncident.date == None) | (OsintIncident.date >= since)  # noqa: E711
-        )
+        .filter(OsintIncident.date >= since)
         .order_by(OsintIncident.date.desc().nullslast())
         .limit(1000)
         .all()
