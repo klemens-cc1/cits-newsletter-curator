@@ -4,7 +4,7 @@ services:
     runtime: python
     plan: free 
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn main:app
+    startCommand: gunicorn main:app --timeout 120
     envVars:
       - key: DATABASE_URL
         fromDatabase:

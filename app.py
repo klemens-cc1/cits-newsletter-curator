@@ -38,7 +38,7 @@ def create_app():
     app.register_blueprint(osint_bp)
 
     with app.app_context():
-        _init_db(retries=6, base_delay=3)
+        _init_db(retries=10, base_delay=5)
 
     return app
 
