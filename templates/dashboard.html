@@ -192,6 +192,77 @@
     .layer-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
     .layer-count { margin-left: auto; font-size: 9px; color: #444; font-family: 'Oswald', sans-serif; letter-spacing: 0.5px; }
 
+    /* ── Fuel filter sub-panel ───────────────────────────────────────── */
+    #fuel-filter {
+      display: none;
+      margin: 0 0 4px 18px;
+      border-left: 1px solid var(--border);
+      padding-left: 10px;
+    }
+    #fuel-filter.visible { display: block; }
+    .fuel-filter-hdr {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 0 3px;
+    }
+    .fuel-filter-title {
+      font-family: 'Oswald', sans-serif;
+      font-size: 8px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #444;
+    }
+    .fuel-filter-actions {
+      display: flex;
+      gap: 5px;
+    }
+    .fuel-filter-btn {
+      font-family: 'Oswald', sans-serif;
+      font-size: 8px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: #444;
+      cursor: pointer;
+      border: none;
+      background: none;
+      padding: 0;
+      transition: color 0.12s;
+    }
+    .fuel-filter-btn:hover { color: #aaa; }
+    .fuel-row-filter {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 0;
+      cursor: pointer;
+      user-select: none;
+    }
+    .fuel-row-filter input[type=checkbox] {
+      width: 10px; height: 10px;
+      accent-color: var(--red);
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .fuel-filter-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .fuel-filter-name {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      letter-spacing: 0.3px;
+      color: #777;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      transition: color 0.12s;
+    }
+    .fuel-row-filter:hover .fuel-filter-name { color: #ccc; }
+    .fuel-filter-ct {
+      font-family: 'Oswald', sans-serif;
+      font-size: 8px;
+      color: #3a3a3a;
+    }
+
     /* ── Grid cards ──────────────────────────────────────────────────── */
     .grid-card { border-top: 1px solid var(--border); padding: 7px 0; }
     .grid-card-hdr {
@@ -418,6 +489,15 @@
       Power Plants
       <span class="layer-count" id="cnt-power_plant"></span>
     </label>
+    <div id="fuel-filter">
+      <div class="fuel-filter-hdr">
+        <span class="fuel-filter-title">Fuel Type</span>
+        <div class="fuel-filter-actions">
+          <button class="fuel-filter-btn" onclick="setAllFuels(true)">All</button>
+          <button class="fuel-filter-btn" onclick="setAllFuels(false)">None</button>
+        </div>
+      </div>
+    </div>
     <label class="layer-row">
       <input type="checkbox" id="lyr-data_center">
       <span class="layer-dot" style="background:#38bdf8"></span>
@@ -500,6 +580,8 @@ const FUEL_COLORS = {
 };
 
 const layers = {};
+// power_plant markers grouped by fuel type: { 'Natural Gas': [marker, ...], ... }
+const fuelMarkers = {};
 
 function getOrCreateLayer(type) {
   if (!layers[type]) {
@@ -508,6 +590,75 @@ function getOrCreateLayer(type) {
       : L.markerClusterGroup({ maxClusterRadius: 50, disableClusteringAtZoom: 11, chunkedLoading: true });
   }
   return layers[type];
+}
+
+// ── Fuel type filter ────────────────────────────────────────────────────────
+
+const FUEL_COLOR_FALLBACK = '#94a3b8';
+
+function fuelColor(fuel) {
+  return FUEL_COLORS[fuel] || FUEL_COLOR_FALLBACK;
+}
+
+function toggleFuel(fuel, checked) {
+  const lyr = layers.power_plant;
+  if (!lyr || !fuelMarkers[fuel]) return;
+  if (checked) {
+    fuelMarkers[fuel].forEach(m => lyr.addLayer(m));
+  } else {
+    fuelMarkers[fuel].forEach(m => lyr.removeLayer(m));
+  }
+}
+
+function setAllFuels(checked) {
+  document.querySelectorAll('[id^="fuel-cb-"]').forEach(cb => {
+    if (cb.checked !== checked) {
+      cb.checked = checked;
+      const fuel = decodeURIComponent(cb.id.replace('fuel-cb-', ''));
+      toggleFuel(fuel, checked);
+    }
+  });
+}
+
+function buildFuelFilterUI(byFuel) {
+  const panel = document.getElementById('fuel-filter');
+  // Remove any previously built rows (keep header)
+  panel.querySelectorAll('.fuel-row-filter').forEach(el => el.remove());
+
+  // Sort fuels: most plants first
+  const sorted = Object.entries(byFuel)
+    .sort((a, b) => b[1].length - a[1].length);
+
+  sorted.forEach(([fuel, markers]) => {
+    const col = fuelColor(fuel);
+    const id  = `fuel-cb-${encodeURIComponent(fuel)}`;
+
+    const row  = document.createElement('label');
+    row.className = 'fuel-row-filter';
+
+    const cb   = document.createElement('input');
+    cb.type    = 'checkbox';
+    cb.id      = id;
+    cb.checked = true;
+    cb.addEventListener('change', () => toggleFuel(fuel, cb.checked));
+
+    const dot  = document.createElement('span');
+    dot.className = 'fuel-filter-dot';
+    dot.style.background = col;
+
+    const nm   = document.createElement('span');
+    nm.className = 'fuel-filter-name';
+    nm.textContent = fuel;
+
+    const ct   = document.createElement('span');
+    ct.className = 'fuel-filter-ct';
+    ct.textContent = markers.length.toLocaleString();
+
+    row.append(cb, dot, nm, ct);
+    panel.appendChild(row);
+  });
+
+  panel.classList.add('visible');
 }
 
 function setStatus(text, state) {
@@ -535,18 +686,45 @@ async function loadLayer(type) {
   } catch { return 0; }
 
   const features = data.features || [];
-  features.forEach(f => {
-    const g = f.geometry;
-    if (!g || g.type !== 'Point') return;
-    const [lng, lat] = g.coordinates;
-    if (!lat || !lng) return;
-    const marker = L.circleMarker([lat, lng], {
-      radius: cfg.radius, color: cfg.color, fillColor: cfg.color,
-      fillOpacity: 0.78, weight: 1, opacity: 0.9,
+
+  if (type === 'power_plant') {
+    // Clear previous fuel groupings
+    Object.keys(fuelMarkers).forEach(k => delete fuelMarkers[k]);
+
+    features.forEach(f => {
+      const g = f.geometry;
+      if (!g || g.type !== 'Point') return;
+      const [lng, lat] = g.coordinates;
+      if (!lat || !lng) return;
+
+      const fuel   = f.properties.fuel_type || 'Other';
+      const color  = fuelColor(fuel);
+      const marker = L.circleMarker([lat, lng], {
+        radius: cfg.radius, color, fillColor: color,
+        fillOpacity: 0.78, weight: 1, opacity: 0.9,
+      });
+      marker.on('click', () => showDetail(f, cfg));
+
+      if (!fuelMarkers[fuel]) fuelMarkers[fuel] = [];
+      fuelMarkers[fuel].push(marker);
+      lyr.addLayer(marker);
     });
-    marker.on('click', () => showDetail(f, cfg));
-    lyr.addLayer(marker);
-  });
+
+    buildFuelFilterUI(fuelMarkers);
+  } else {
+    features.forEach(f => {
+      const g = f.geometry;
+      if (!g || g.type !== 'Point') return;
+      const [lng, lat] = g.coordinates;
+      if (!lat || !lng) return;
+      const marker = L.circleMarker([lat, lng], {
+        radius: cfg.radius, color: cfg.color, fillColor: cfg.color,
+        fillOpacity: 0.78, weight: 1, opacity: 0.9,
+      });
+      marker.on('click', () => showDetail(f, cfg));
+      lyr.addLayer(marker);
+    });
+  }
 
   if (cb && cb.checked) map.addLayer(lyr);
   setCount(type, features.length);
@@ -612,6 +790,10 @@ document.querySelectorAll('input[id^="lyr-"]').forEach(cb => {
     const lyr  = layers[type];
     if (!lyr) return;
     if (cb.checked) map.addLayer(lyr); else map.removeLayer(lyr);
+    // Show/hide fuel filter with the power_plant layer
+    if (type === 'power_plant') {
+      document.getElementById('fuel-filter').classList.toggle('visible', cb.checked);
+    }
   });
 });
 
