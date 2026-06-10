@@ -472,13 +472,13 @@
 <script>
 const API = '';
 
-// Dark Carto tiles — cohesive with the dark panel aesthetic
 const map = L.map('map', { zoomControl: true }).setView([38.5, -96], 4);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_matter/{z}/{x}/{y}{r}.png', {
-  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a>',
-  subdomains: 'abcd',
-  maxZoom: 19,
+L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png', {
+  attribution: '© <a href="https://stadiamaps.com/" target="_blank">Stadia Maps</a> © <a href="https://openmaptiles.org/" target="_blank">OpenMapTiles</a> © <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>',
+  maxZoom: 20,
 }).addTo(map);
+// Force layout recalc after flex container settles
+setTimeout(() => map.invalidateSize(), 100);
 
 const ASSET_CFG = {
   power_plant: { color: '#f59e0b', radius: 5, label: 'Power Plant' },
