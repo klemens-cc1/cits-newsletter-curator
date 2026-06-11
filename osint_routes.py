@@ -351,16 +351,46 @@ def osint_incidents_ingest():
     return jsonify({"upserted": upserted})
 
 
-# ── ISO/RTO region boundaries (proxied from HIFLD to avoid browser CORS) ─────
+# ── ISO/RTO region overlay (state boundaries + region tag) ───────────────────
 
-# In-process cache: fetched once per server lifetime, ~400 KB GeoJSON
 _regions_cache: bytes | None = None
 
-_HIFLD_URL = (
-    "https://services1.arcgis.com/Hp6G80Pky0om7QvQ/ArcGIS/rest/services/"
-    "Electric_Planning_Areas/FeatureServer/0/query"
-    "?where=TYPE+IN+('REGIONAL+TRANSMISSION+ORGANIZATION','INDEPENDENT+SYSTEM+OPERATOR')"
-    "&outFields=NAME%2CTYPE&f=geojson&outSR=4326"
+# US state → primary ISO/RTO operator (approximate — utilities cross state lines)
+_STATE_REGION: dict[str, str] = {
+    # ISO New England
+    "Connecticut": "ISO-NE", "Maine": "ISO-NE", "Massachusetts": "ISO-NE",
+    "New Hampshire": "ISO-NE", "Rhode Island": "ISO-NE", "Vermont": "ISO-NE",
+    # NYISO
+    "New York": "NYISO",
+    # PJM Interconnection
+    "New Jersey": "PJM", "Delaware": "PJM", "Maryland": "PJM",
+    "Pennsylvania": "PJM", "Ohio": "PJM", "West Virginia": "PJM",
+    "Virginia": "PJM", "Indiana": "PJM", "Kentucky": "PJM",
+    "District of Columbia": "PJM",
+    # MISO
+    "Minnesota": "MISO", "Wisconsin": "MISO", "Michigan": "MISO",
+    "Iowa": "MISO", "Illinois": "MISO", "Missouri": "MISO",
+    "North Dakota": "MISO", "South Dakota": "MISO",
+    "Arkansas": "MISO", "Mississippi": "MISO", "Louisiana": "MISO",
+    # SPP
+    "Kansas": "SPP", "Oklahoma": "SPP", "Nebraska": "SPP",
+    # ERCOT
+    "Texas": "ERCOT",
+    # SERC (non-ISO Southeast)
+    "Tennessee": "SERC", "North Carolina": "SERC", "South Carolina": "SERC",
+    "Georgia": "SERC", "Alabama": "SERC", "Florida": "SERC",
+    # WECC / Western
+    "Washington": "WECC", "Oregon": "WECC", "Idaho": "WECC",
+    "Montana": "WECC", "Wyoming": "WECC", "Colorado": "WECC",
+    "Utah": "WECC", "Nevada": "WECC", "Arizona": "WECC", "New Mexico": "WECC",
+    # CAISO
+    "California": "CAISO",
+    # Not interconnected / non-contiguous
+    "Alaska": "Alaska", "Hawaii": "Hawaii",
+}
+
+_STATES_URL = (
+    "https://eric.clst.org/assets/wiki/uploads/Stuff/gz_2010_us_040_00_500k.json"
 )
 
 
@@ -370,16 +400,26 @@ def osint_regions():
     if _regions_cache is None:
         try:
             req = urllib.request.Request(
-                _HIFLD_URL,
-                headers={"Accept": "application/json", "User-Agent": "cits-curator/1.0"},
+                _STATES_URL,
+                headers={"User-Agent": "cits-curator/1.0"},
             )
             with urllib.request.urlopen(req, timeout=30) as resp:
-                _regions_cache = resp.read()
+                data = json.loads(resp.read())
+
+            for feat in data.get("features", []):
+                props = feat.setdefault("properties", {})
+                state = props.get("NAME") or props.get("name") or ""
+                props["region"] = _STATE_REGION.get(state, "Other")
+
+            _regions_cache = json.dumps(data).encode()
         except Exception as exc:
             return jsonify({"error": str(exc)}), 502
 
-    return Response(_regions_cache, mimetype="application/geo+json",
-                    headers={"Cache-Control": "public, max-age=86400"})
+    return Response(
+        _regions_cache,
+        mimetype="application/geo+json",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 # ── News (reads curator Article table directly) ───────────────────────────────

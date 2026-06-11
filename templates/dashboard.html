@@ -653,18 +653,23 @@ function getOrCreateLayer(type) {
 
 // ── ISO / RTO region overlay ─────────────────────────────────────────────────
 
-const REGION_PALETTE = [
-  '#6366f1','#0ea5e9','#10b981','#f59e0b',
-  '#ec4899','#8b5cf6','#14b8a6','#f97316',
-];
-const _regionColorIdx = {};
-let   _regionPalettePos = 0;
+const REGION_COLORS = {
+  'ISO-NE':  '#ec4899',
+  'NYISO':   '#a855f7',
+  'PJM':     '#6366f1',
+  'MISO':    '#22d3ee',
+  'SPP':     '#f59e0b',
+  'ERCOT':   '#ef4444',
+  'SERC':    '#10b981',
+  'CAISO':   '#f97316',
+  'WECC':    '#60a5fa',
+  'Alaska':  '#94a3b8',
+  'Hawaii':  '#94a3b8',
+  'Other':   '#3f3f46',
+};
 
-function _regionColor(name) {
-  if (!_regionColorIdx[name]) {
-    _regionColorIdx[name] = REGION_PALETTE[_regionPalettePos++ % REGION_PALETTE.length];
-  }
-  return _regionColorIdx[name];
+function _regionColor(region) {
+  return REGION_COLORS[region] || '#52525b';
 }
 
 let regionsLayer  = null;
@@ -681,13 +686,15 @@ async function loadRegions() {
 
     regionsLayer = L.geoJSON(data, {
       style: feat => {
-        const col = _regionColor(feat.properties.NAME || '');
-        return { color: col, weight: 1.5, dashArray: '5 4', fillColor: col, fillOpacity: 0.07, opacity: 0.7 };
+        const col = _regionColor(feat.properties.region || 'Other');
+        return { color: col, weight: 1, dashArray: '4 3', fillColor: col, fillOpacity: 0.08, opacity: 0.6 };
       },
       onEachFeature: (feat, layer) => {
-        const name = feat.properties.NAME || '';
-        if (name) layer.bindTooltip(name, { sticky: true, className: 'region-tooltip' });
-        layer.on('mouseover', function () { this.setStyle({ fillOpacity: 0.18, opacity: 1 }); });
+        const region = feat.properties.region || '';
+        const state  = feat.properties.NAME   || '';
+        const label  = region && region !== 'Other' ? `${region} — ${state}` : state;
+        if (label) layer.bindTooltip(label, { sticky: true, className: 'region-tooltip' });
+        layer.on('mouseover', function () { this.setStyle({ fillOpacity: 0.22, opacity: 1 }); });
         layer.on('mouseout',  function () { regionsLayer.resetStyle(this); });
       },
     });
