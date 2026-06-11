@@ -351,46 +351,52 @@ def osint_incidents_ingest():
     return jsonify({"upserted": upserted})
 
 
-# ── ISO/RTO region overlay (state boundaries + region tag) ───────────────────
+# ── ISO/RTO region overlay (electricityMaps balancing-authority polygons) ────
 
 _regions_cache: bytes | None = None
 
-# US state → primary ISO/RTO operator (approximate — utilities cross state lines)
-_STATE_REGION: dict[str, str] = {
-    # ISO New England
-    "Connecticut": "ISO-NE", "Maine": "ISO-NE", "Massachusetts": "ISO-NE",
-    "New Hampshire": "ISO-NE", "Rhode Island": "ISO-NE", "Vermont": "ISO-NE",
-    # NYISO
-    "New York": "NYISO",
-    # PJM Interconnection
-    "New Jersey": "PJM", "Delaware": "PJM", "Maryland": "PJM",
-    "Pennsylvania": "PJM", "Ohio": "PJM", "West Virginia": "PJM",
-    "Virginia": "PJM", "Indiana": "PJM", "Kentucky": "PJM",
-    "District of Columbia": "PJM",
+# electricityMaps zone code → parent ISO/RTO for coloring
+_ZONE_REGION: dict[str, str] = {
+    # CAISO (California)
+    "US-CAL-CISO": "CAISO", "US-CAL-BANC": "CAISO", "US-CAL-IID": "CAISO",
+    "US-CAL-LDWP": "CAISO", "US-CAL-TIDC": "CAISO",
+    # PJM
+    "US-MIDA-PJM": "PJM",
     # MISO
-    "Minnesota": "MISO", "Wisconsin": "MISO", "Michigan": "MISO",
-    "Iowa": "MISO", "Illinois": "MISO", "Missouri": "MISO",
-    "North Dakota": "MISO", "South Dakota": "MISO",
-    "Arkansas": "MISO", "Mississippi": "MISO", "Louisiana": "MISO",
+    "US-MIDW-MISO": "MISO", "US-MIDW-AECI": "MISO", "US-MIDW-LGEE": "MISO",
+    # ISO-NE
+    "US-NE-ISNE": "ISO-NE",
+    # NYISO
+    "US-NY-NYIS": "NYISO",
     # SPP
-    "Kansas": "SPP", "Oklahoma": "SPP", "Nebraska": "SPP",
+    "US-CENT-SWPP": "SPP", "US-CENT-SPA": "SPP",
     # ERCOT
-    "Texas": "ERCOT",
-    # SERC (non-ISO Southeast)
-    "Tennessee": "SERC", "North Carolina": "SERC", "South Carolina": "SERC",
-    "Georgia": "SERC", "Alabama": "SERC", "Florida": "SERC",
-    # WECC / Western
-    "Washington": "WECC", "Oregon": "WECC", "Idaho": "WECC",
-    "Montana": "WECC", "Wyoming": "WECC", "Colorado": "WECC",
-    "Utah": "WECC", "Nevada": "WECC", "Arizona": "WECC", "New Mexico": "WECC",
-    # CAISO
-    "California": "CAISO",
-    # Not interconnected / non-contiguous
-    "Alaska": "Alaska", "Hawaii": "Hawaii",
+    "US-TEX-ERCO": "ERCOT",
+    # SERC / Southeast (non-ISO)
+    "US-CAR-CPLE": "SERC", "US-CAR-CPLW": "SERC", "US-CAR-DUK": "SERC",
+    "US-CAR-SC": "SERC", "US-CAR-SCEG": "SERC",
+    "US-FLA-FMPP": "SERC", "US-FLA-FPC": "SERC", "US-FLA-FPL": "SERC",
+    "US-FLA-GVL": "SERC", "US-FLA-HST": "SERC", "US-FLA-JEA": "SERC",
+    "US-FLA-SEC": "SERC", "US-FLA-TAL": "SERC", "US-FLA-TEC": "SERC",
+    "US-SE-SOCO": "SERC", "US-TEN-TVA": "SERC",
+    # WECC (Northwest + Southwest)
+    "US-NW-AVA": "WECC", "US-NW-BPAT": "WECC", "US-NW-CHPD": "WECC",
+    "US-NW-DOPD": "WECC", "US-NW-GCPD": "WECC", "US-NW-IPCO": "WECC",
+    "US-NW-NEVP": "WECC", "US-NW-NWMT": "WECC", "US-NW-PACE": "WECC",
+    "US-NW-PACW": "WECC", "US-NW-PGE": "WECC", "US-NW-PSCO": "WECC",
+    "US-NW-PSEI": "WECC", "US-NW-SCL": "WECC", "US-NW-TPWR": "WECC",
+    "US-NW-WACM": "WECC", "US-NW-WAUW": "WECC",
+    "US-SW-AZPS": "WECC", "US-SW-EPE": "WECC", "US-SW-PNM": "WECC",
+    "US-SW-SRP": "WECC", "US-SW-TEPC": "WECC", "US-SW-WALC": "WECC",
+    # Alaska / Hawaii
+    "US-AK": "Alaska", "US-AK-SEAPA": "Alaska",
+    "US-HI": "Hawaii",
 }
 
-_STATES_URL = (
-    "https://eric.clst.org/assets/wiki/uploads/Stuff/gz_2010_us_040_00_500k.json"
+# electricityMaps geo/world.geojson — actual balancing-authority polygons
+_EM_URL = (
+    "https://raw.githubusercontent.com/electricitymaps/electricitymaps-contrib"
+    "/master/geo/world.geojson"
 )
 
 
@@ -400,18 +406,24 @@ def osint_regions():
     if _regions_cache is None:
         try:
             req = urllib.request.Request(
-                _STATES_URL,
+                _EM_URL,
                 headers={"User-Agent": "cits-curator/1.0"},
             )
-            with urllib.request.urlopen(req, timeout=30) as resp:
+            with urllib.request.urlopen(req, timeout=45) as resp:
                 data = json.loads(resp.read())
 
+            us_features = []
             for feat in data.get("features", []):
-                props = feat.setdefault("properties", {})
-                state = props.get("NAME") or props.get("name") or ""
-                props["region"] = _STATE_REGION.get(state, "Other")
+                props = feat.get("properties", {})
+                zone  = props.get("zoneName", "")
+                if not zone.startswith("US-"):
+                    continue
+                props["region"]   = _ZONE_REGION.get(zone, "Other")
+                props["zoneName"] = zone
+                us_features.append(feat)
 
-            _regions_cache = json.dumps(data).encode()
+            filtered = {"type": "FeatureCollection", "features": us_features}
+            _regions_cache = json.dumps(filtered).encode()
         except Exception as exc:
             return jsonify({"error": str(exc)}), 502
 

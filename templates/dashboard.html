@@ -687,14 +687,14 @@ async function loadRegions() {
     regionsLayer = L.geoJSON(data, {
       style: feat => {
         const col = _regionColor(feat.properties.region || 'Other');
-        return { color: col, weight: 1, dashArray: '4 3', fillColor: col, fillOpacity: 0.08, opacity: 0.6 };
+        return { color: col, weight: 0.6, fillColor: col, fillOpacity: 0.1, opacity: 0.5 };
       },
       onEachFeature: (feat, layer) => {
         const region = feat.properties.region || '';
-        const state  = feat.properties.NAME   || '';
-        const label  = region && region !== 'Other' ? `${region} — ${state}` : state;
+        const zone   = feat.properties.zoneName || '';
+        const label  = region && region !== 'Other' ? `${region} — ${zone}` : zone;
         if (label) layer.bindTooltip(label, { sticky: true, className: 'region-tooltip' });
-        layer.on('mouseover', function () { this.setStyle({ fillOpacity: 0.22, opacity: 1 }); });
+        layer.on('mouseover', function () { this.setStyle({ fillOpacity: 0.25, opacity: 0.9 }); });
         layer.on('mouseout',  function () { regionsLayer.resetStyle(this); });
       },
     });
