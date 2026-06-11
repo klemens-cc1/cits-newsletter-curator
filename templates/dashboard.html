@@ -568,16 +568,53 @@ const ASSET_CFG = {
 };
 
 const FUEL_COLORS = {
-  'Natural Gas': '#f97316', 'Gas': '#f97316', 'NG': '#f97316',
-  'Coal':        '#a8a29e',
-  'Nuclear':     '#a855f7',
-  'Wind':        '#22d3ee',
-  'Solar':       '#facc15',
-  'Hydro':       '#60a5fa', 'Hydroelectric': '#60a5fa', 'Hydro / Water': '#60a5fa',
-  'Battery':     '#4ade80',
-  'Oil':         '#dc2626',
-  'Other':       '#94a3b8', 'Other Renewables': '#6ee7b7',
+  'Natural Gas':      '#f97316',
+  'Coal':             '#a8a29e',
+  'Nuclear':          '#a855f7',
+  'Wind':             '#22d3ee',
+  'Solar':            '#facc15',
+  'Hydro':            '#60a5fa',
+  'Oil':              '#ef4444',
+  'Battery / Storage':'#4ade80',
+  'Geothermal':       '#fb923c',
+  'Biomass':          '#86efac',
+  'Other':            '#52525b',
 };
+
+// Consolidate EIA granular fuel names into map-display categories
+const FUEL_CONSOLIDATION = {
+  'Bituminous Coal':       'Coal',
+  'Subbituminous Coal':    'Coal',
+  'Lignite Coal':          'Coal',
+  'Distillate Fuel Oil':   'Oil',
+  'Residual Fuel Oil':     'Oil',
+  'Jet Fuel':              'Oil',
+  'Kerosene':              'Oil',
+  'Biomass / Wood':        'Biomass',
+  'Wood / Wood Waste Solids': 'Biomass',
+  'Wood Liquids':          'Biomass',
+  'Municipal Solid Waste': 'Biomass',
+  'Landfill Gas':          'Biomass',
+  'Black Liquor':          'Biomass',
+  'Agricultural Byproduct':'Biomass',
+  'Other Biomass Gas':     'Biomass',
+  'Other Biomass Liquids': 'Biomass',
+  'Other Biomass Solids':  'Biomass',
+  'Petroleum Coke':        'Other',
+  'Other Gas':             'Other',
+  'Propane':               'Other',
+  'Syngas / Coal':         'Other',
+  'Syngas / Petroleum':    'Other',
+  'Tire-Derived Fuel':     'Other',
+  'Waste Heat':            'Other',
+  'Hydrogen':              'Other',
+  'Fuel Cell':             'Other',
+  'Purchased Steam':       'Other',
+};
+
+function consolidateFuel(raw) {
+  return FUEL_CONSOLIDATION[raw] || raw || 'Other';
+}
 
 const layers = {};
 // power_plant markers grouped by fuel type: { 'Natural Gas': [marker, ...], ... }
@@ -620,39 +657,40 @@ function setAllFuels(checked) {
   });
 }
 
-function buildFuelFilterUI(byFuel) {
+function buildFuelFilterUI(byFuel, byMW) {
   const panel = document.getElementById('fuel-filter');
-  // Remove any previously built rows (keep header)
   panel.querySelectorAll('.fuel-row-filter').forEach(el => el.remove());
 
-  // Sort fuels: most plants first
+  // Sort by total installed MW descending
   const sorted = Object.entries(byFuel)
-    .sort((a, b) => b[1].length - a[1].length);
+    .sort((a, b) => (byMW[b[0]] || 0) - (byMW[a[0]] || 0));
 
   sorted.forEach(([fuel, markers]) => {
     const col = fuelColor(fuel);
     const id  = `fuel-cb-${encodeURIComponent(fuel)}`;
+    const mw  = byMW[fuel] || 0;
+    const cap = mw >= 1000 ? (mw / 1000).toFixed(0) + ' GW' : Math.round(mw) + ' MW';
 
-    const row  = document.createElement('label');
+    const row = document.createElement('label');
     row.className = 'fuel-row-filter';
 
-    const cb   = document.createElement('input');
-    cb.type    = 'checkbox';
-    cb.id      = id;
+    const cb  = document.createElement('input');
+    cb.type   = 'checkbox';
+    cb.id     = id;
     cb.checked = true;
     cb.addEventListener('change', () => toggleFuel(fuel, cb.checked));
 
-    const dot  = document.createElement('span');
+    const dot = document.createElement('span');
     dot.className = 'fuel-filter-dot';
     dot.style.background = col;
 
-    const nm   = document.createElement('span');
+    const nm  = document.createElement('span');
     nm.className = 'fuel-filter-name';
     nm.textContent = fuel;
 
-    const ct   = document.createElement('span');
+    const ct  = document.createElement('span');
     ct.className = 'fuel-filter-ct';
-    ct.textContent = markers.length.toLocaleString();
+    ct.textContent = cap;
 
     row.append(cb, dot, nm, ct);
     panel.appendChild(row);
@@ -681,7 +719,7 @@ async function loadLayer(type) {
 
   let data;
   try {
-    const r = await fetch(`${API}/api/osint/assets?type=${type}&limit=10000`);
+    const r = await fetch(`${API}/api/osint/assets?type=${type}&limit=25000`);
     data = await r.json();
   } catch { return 0; }
 
@@ -690,6 +728,7 @@ async function loadLayer(type) {
   if (type === 'power_plant') {
     // Clear previous fuel groupings
     Object.keys(fuelMarkers).forEach(k => delete fuelMarkers[k]);
+    const fuelMW = {};
 
     features.forEach(f => {
       const g = f.geometry;
@@ -697,20 +736,23 @@ async function loadLayer(type) {
       const [lng, lat] = g.coordinates;
       if (!lat || !lng) return;
 
-      const fuel   = f.properties.fuel_type || 'Other';
-      const color  = fuelColor(fuel);
+      const fuel  = consolidateFuel(f.properties.fuel_type);
+      const color = fuelColor(fuel);
+      const cap   = parseFloat(f.properties.capacity_mw) || 0;
+
       const marker = L.circleMarker([lat, lng], {
         radius: cfg.radius, color, fillColor: color,
         fillOpacity: 0.78, weight: 1, opacity: 0.9,
       });
       marker.on('click', () => showDetail(f, cfg));
 
-      if (!fuelMarkers[fuel]) fuelMarkers[fuel] = [];
+      if (!fuelMarkers[fuel]) { fuelMarkers[fuel] = []; fuelMW[fuel] = 0; }
       fuelMarkers[fuel].push(marker);
+      fuelMW[fuel] += cap;
       lyr.addLayer(marker);
     });
 
-    buildFuelFilterUI(fuelMarkers);
+    buildFuelFilterUI(fuelMarkers, fuelMW);
   } else {
     features.forEach(f => {
       const g = f.geometry;
