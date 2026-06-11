@@ -14,15 +14,17 @@ API surface:
   GET  /api/osint/incidents         — recent pipeline/cyber/nuclear incidents
   POST /api/osint/incidents/ingest  — bulk upsert incidents (X-API-Key required)
   GET  /api/osint/news              — recent articles from the curator Article table
+  GET  /api/osint/regions           — ISO/RTO region boundaries (proxied from HIFLD)
 """
 from __future__ import annotations
 
 import json
 import os
+import urllib.request
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-from flask import Blueprint, jsonify, render_template, request
+from flask import Blueprint, jsonify, render_template, request, Response
 from sqlalchemy import func, text
 
 
@@ -347,6 +349,37 @@ def osint_incidents_ingest():
 
     db.session.commit()
     return jsonify({"upserted": upserted})
+
+
+# ── ISO/RTO region boundaries (proxied from HIFLD to avoid browser CORS) ─────
+
+# In-process cache: fetched once per server lifetime, ~400 KB GeoJSON
+_regions_cache: bytes | None = None
+
+_HIFLD_URL = (
+    "https://services1.arcgis.com/Hp6G80Pky0om7QvQ/ArcGIS/rest/services/"
+    "Electric_Planning_Areas/FeatureServer/0/query"
+    "?where=TYPE+IN+('REGIONAL+TRANSMISSION+ORGANIZATION','INDEPENDENT+SYSTEM+OPERATOR')"
+    "&outFields=NAME%2CTYPE&f=geojson&outSR=4326"
+)
+
+
+@osint_bp.route("/api/osint/regions")
+def osint_regions():
+    global _regions_cache
+    if _regions_cache is None:
+        try:
+            req = urllib.request.Request(
+                _HIFLD_URL,
+                headers={"Accept": "application/json", "User-Agent": "cits-curator/1.0"},
+            )
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                _regions_cache = resp.read()
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 502
+
+    return Response(_regions_cache, mimetype="application/geo+json",
+                    headers={"Cache-Control": "public, max-age=86400"})
 
 
 # ── News (reads curator Article table directly) ───────────────────────────────

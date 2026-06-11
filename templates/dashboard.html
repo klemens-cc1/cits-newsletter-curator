@@ -674,16 +674,8 @@ async function loadRegions() {
   if (regionsLoaded) return;
   setStatus('Loading regions…', '');
 
-  // HIFLD Electric Planning Areas — ISO/RTO subset
-  const url = [
-    'https://services1.arcgis.com/Hp6G80Pky0om7QvQ/ArcGIS/rest/services/',
-    'Electric_Planning_Areas/FeatureServer/0/query',
-    '?where=TYPE+IN+(\'REGIONAL+TRANSMISSION+ORGANIZATION\',\'INDEPENDENT+SYSTEM+OPERATOR\')',
-    '&outFields=NAME,TYPE&f=geojson&outSR=4326',
-  ].join('');
-
   try {
-    const r = await fetch(url);
+    const r = await fetch(`${API}/api/osint/regions`);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const data = await r.json();
 
