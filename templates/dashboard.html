@@ -428,6 +428,22 @@
       color: #3a3a3a;
     }
 
+    /* ── Region tooltip ─────────────────────────────────────────────── */
+    .region-tooltip {
+      background: rgba(22,22,22,0.92) !important;
+      border: 1px solid var(--border) !important;
+      border-radius: 0 !important;
+      color: #ccc !important;
+      font-family: 'Oswald', sans-serif !important;
+      font-size: 10px !important;
+      letter-spacing: 1.5px !important;
+      text-transform: uppercase !important;
+      padding: 4px 8px !important;
+      box-shadow: none !important;
+      white-space: nowrap !important;
+    }
+    .region-tooltip::before { display: none !important; }
+
     /* ── Leaflet overrides ───────────────────────────────────────────── */
     .leaflet-control-attribution {
       background: rgba(22,22,22,0.85) !important;
@@ -522,6 +538,11 @@
       Incidents (90d)
       <span class="layer-count" id="cnt-incidents"></span>
     </label>
+    <label class="layer-row">
+      <input type="checkbox" id="lyr-regions">
+      <span class="layer-dot" style="background:transparent;border:1px solid #555;border-radius:2px"></span>
+      ISO / RTO Regions
+    </label>
 
     <div class="section-head">Grid Status</div>
     <div id="grid-panel"><p class="empty">No grid data yet.</p></div>
@@ -552,7 +573,8 @@
 <script>
 const API = '';
 
-const map = L.map('map', { zoomControl: true }).setView([38.5, -96], 4);
+const map = L.map('map', { zoomControl: false }).setView([38.5, -96], 4);
+L.control.zoom({ position: 'bottomright' }).addTo(map);
 L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png', {
   attribution: '© <a href="https://stadiamaps.com/" target="_blank">Stadia Maps</a> © <a href="https://openmaptiles.org/" target="_blank">OpenMapTiles</a> © <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>',
   maxZoom: 20,
@@ -627,6 +649,69 @@ function getOrCreateLayer(type) {
       : L.markerClusterGroup({ maxClusterRadius: 50, disableClusteringAtZoom: 11, chunkedLoading: true });
   }
   return layers[type];
+}
+
+// ── ISO / RTO region overlay ─────────────────────────────────────────────────
+
+const REGION_PALETTE = [
+  '#6366f1','#0ea5e9','#10b981','#f59e0b',
+  '#ec4899','#8b5cf6','#14b8a6','#f97316',
+];
+const _regionColorIdx = {};
+let   _regionPalettePos = 0;
+
+function _regionColor(name) {
+  if (!_regionColorIdx[name]) {
+    _regionColorIdx[name] = REGION_PALETTE[_regionPalettePos++ % REGION_PALETTE.length];
+  }
+  return _regionColorIdx[name];
+}
+
+let regionsLayer  = null;
+let regionsLoaded = false;
+
+async function loadRegions() {
+  if (regionsLoaded) return;
+  setStatus('Loading regions…', '');
+
+  // HIFLD Electric Planning Areas — ISO/RTO subset
+  const url = [
+    'https://services1.arcgis.com/Hp6G80Pky0om7QvQ/ArcGIS/rest/services/',
+    'Electric_Planning_Areas/FeatureServer/0/query',
+    '?where=TYPE+IN+(\'REGIONAL+TRANSMISSION+ORGANIZATION\',\'INDEPENDENT+SYSTEM+OPERATOR\')',
+    '&outFields=NAME,TYPE&f=geojson&outSR=4326',
+  ].join('');
+
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+
+    regionsLayer = L.geoJSON(data, {
+      style: feat => {
+        const col = _regionColor(feat.properties.NAME || '');
+        return { color: col, weight: 1.5, dashArray: '5 4', fillColor: col, fillOpacity: 0.07, opacity: 0.7 };
+      },
+      onEachFeature: (feat, layer) => {
+        const name = feat.properties.NAME || '';
+        if (name) layer.bindTooltip(name, { sticky: true, className: 'region-tooltip' });
+        layer.on('mouseover', function () { this.setStyle({ fillOpacity: 0.18, opacity: 1 }); });
+        layer.on('mouseout',  function () { regionsLayer.resetStyle(this); });
+      },
+    });
+
+    regionsLoaded = true;
+    const cb = document.getElementById('lyr-regions');
+    if (cb && cb.checked) map.addLayer(regionsLayer);
+    setStatus('Live', 'live');
+  } catch (err) {
+    console.warn('Region load failed:', err);
+    setStatus('Region load failed', 'error');
+    setTimeout(() => setStatus('Live', 'live'), 3000);
+    // Uncheck so user can retry
+    const cb = document.getElementById('lyr-regions');
+    if (cb) cb.checked = false;
+  }
 }
 
 // ── Fuel type filter ────────────────────────────────────────────────────────
@@ -829,10 +914,22 @@ async function loadIncidents() {
 document.querySelectorAll('input[id^="lyr-"]').forEach(cb => {
   cb.addEventListener('change', () => {
     const type = cb.id.replace('lyr-', '');
-    const lyr  = layers[type];
+
+    // Regions overlay: lazy-load on first enable
+    if (type === 'regions') {
+      if (cb.checked) {
+        if (!regionsLoaded) { loadRegions(); return; }
+        map.addLayer(regionsLayer);
+      } else if (regionsLayer) {
+        map.removeLayer(regionsLayer);
+      }
+      return;
+    }
+
+    const lyr = layers[type];
     if (!lyr) return;
     if (cb.checked) map.addLayer(lyr); else map.removeLayer(lyr);
-    // Show/hide fuel filter with the power_plant layer
+
     if (type === 'power_plant') {
       document.getElementById('fuel-filter').classList.toggle('visible', cb.checked);
     }
