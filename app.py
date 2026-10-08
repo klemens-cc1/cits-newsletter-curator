@@ -17,9 +17,8 @@ def create_app():
     app = Flask(__name__)
 
     database_url = os.environ.get("DATABASE_URL", "sqlite:///curator.db")
-    # Render uses postgres:// but SQLAlchemy needs postgresql://
-    if database_url.startswith("postgres://"):
-        database_url = database_url.replace("postgres://", "postgresql://", 1)
+    # Normalize postgres:// / postgresql+psycopg:// etc. to the installed driver (psycopg2)
+    database_url = re.sub(r"^postgres(ql)?(\+\w+)?://", "postgresql+psycopg2://", database_url)
 
     app.config["SQLALCHEMY_DATABASE_URI"] = database_url
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
