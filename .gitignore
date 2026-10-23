@@ -6,3 +6,5 @@ instance/
 flask_dev.log
 *.db
 .DS_Store
+# Holds the private newsletter-inbox URL; this repo is public
+feed_updates_2026-10c.sql
