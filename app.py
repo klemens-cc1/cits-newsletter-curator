@@ -33,10 +33,6 @@ def create_app():
     from routes import bp
     app.register_blueprint(bp)
 
-    import osint_models  # noqa: F401 — registers ORM models so db.create_all() sees them
-    from osint_routes import osint_bp
-    app.register_blueprint(osint_bp)
-
     # Health endpoint — must respond before DB is ready so Render deploy succeeds.
     @app.get("/health")
     def health():
@@ -107,21 +103,6 @@ def _run_migrations(db):
         "ALTER TABLE research_articles ADD COLUMN IF NOT EXISTS source_domain VARCHAR(256)",
         "CREATE TABLE IF NOT EXISTS feedback (id SERIAL PRIMARY KEY, message TEXT NOT NULL, submitted_at TIMESTAMPTZ DEFAULT NOW())",
         "ALTER TABLE research_sessions ADD COLUMN IF NOT EXISTS search_params TEXT",
-        # Grid snapshot schema evolution: iso -> region + add region_type, source columns
-        """
-        DO $$ BEGIN
-          IF EXISTS (
-            SELECT 1 FROM information_schema.columns
-            WHERE table_name = 'osint_grid_snapshots' AND column_name = 'iso'
-          ) THEN
-            ALTER TABLE osint_grid_snapshots RENAME COLUMN iso TO region;
-          END IF;
-        END $$
-        """,
-        "ALTER TABLE osint_grid_snapshots ADD COLUMN IF NOT EXISTS region_type VARCHAR(16) NOT NULL DEFAULT 'iso'",
-        "ALTER TABLE osint_grid_snapshots ADD COLUMN IF NOT EXISTS source VARCHAR(32) NOT NULL DEFAULT 'gridstatus'",
-        "ALTER TABLE osint_grid_snapshots DROP CONSTRAINT IF EXISTS uq_osint_grid_snapshot",
-        "CREATE UNIQUE INDEX IF NOT EXISTS uq_osint_grid_snapshot ON osint_grid_snapshots (region, timestamp, metric, fuel, source)",
     ]
     for sql in migrations:
         try:

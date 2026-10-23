@@ -9,6 +9,11 @@ import threading
 import urllib.parse
 
 log = logging.getLogger(__name__)
+
+# Groq retires models without notice; on retirement every call fails and callers fall back silently.
+# gpt-oss models reason before answering: keep reasoning_effort low and leave max_tokens headroom.
+GROQ_MODEL      = "openai/gpt-oss-120b"
+GROQ_MODEL_FAST = "openai/gpt-oss-20b"
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 
@@ -475,15 +480,6 @@ def summarize_article(article_id):
 
 @bp.route("/api/trigger-refresh", methods=["POST"])
 def trigger_refresh():
-    data = request.get_json() or {}
-    password = data.get("password", "")
-    expected = os.environ.get("REFRESH_PASSWORD", "")
-
-    if not expected:
-        return jsonify({"error": "REFRESH_PASSWORD not configured"}), 500
-    if password != expected:
-        return jsonify({"error": "Invalid password"}), 403
-
     github_token = os.environ.get("GITHUB_PAT", "")
     if not github_token:
         return jsonify({"error": "GITHUB_PAT not configured"}), 500
@@ -608,9 +604,10 @@ Rules:
             "https://api.groq.com/openai/v1/chat/completions",
             headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
             json={
-                "model": "llama-3.3-70b-versatile",
+                "model": GROQ_MODEL,
+                "reasoning_effort": "low",
                 "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 800,
+                "max_tokens": 1500,
                 "temperature": 0.2,
             },
             timeout=30,
@@ -851,17 +848,20 @@ Respond with ONLY a single integer from 1 to 10. No explanation."""
                 "Content-Type": "application/json",
             },
             json={
-                "model": "llama-3.3-70b-versatile",
+                "model": GROQ_MODEL,
+                "reasoning_effort": "low",
                 "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 5,
+                "max_tokens": 200,
                 "temperature": 0,
             },
             timeout=15,
         )
+        resp.raise_for_status()
         text = resp.json()["choices"][0]["message"]["content"].strip()
         score = int(re.search(r"\d+", text).group())
         return max(1, min(10, score))
-    except Exception:
+    except Exception as e:
+        log.warning(f"Relevance scoring failed, defaulting to 5: {e}")
         return 5
 
 
@@ -949,8 +949,8 @@ def delete_research_article(article_id):
 def export_summaries(session_id):
     """Generate ≤50-word summaries for a batch of articles for export use.
 
-    Uses llama-3.1-8b-instant (fast, lightweight) so these calls don't compete
-    with the main search/score pipeline which uses the 70b model.
+    Uses GROQ_MODEL_FAST (fast, lightweight) so these calls don't compete
+    with the main search/score pipeline (GROQ_MODEL).
     """
     ResearchSession.query.get_or_404(session_id)
     data = request.get_json() or {}
@@ -995,9 +995,10 @@ def export_summaries(session_id):
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": "llama-3.1-8b-instant",
+                    "model": GROQ_MODEL_FAST,
+                    "reasoning_effort": "low",
                     "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": 80,
+                    "max_tokens": 300,
                     "temperature": 0.15,
                 },
                 timeout=10,
@@ -1120,9 +1121,10 @@ Return ONLY the 4 queries, one per line. No numbering, no explanation, no quotes
             "https://api.groq.com/openai/v1/chat/completions",
             headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
             json={
-                "model": "llama-3.3-70b-versatile",
+                "model": GROQ_MODEL,
+                "reasoning_effort": "low",
                 "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 120,
+                "max_tokens": 400,
                 "temperature": 0.3,
             },
             timeout=15,
