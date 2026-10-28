@@ -217,7 +217,18 @@ def ingest():
     added = 0
     skipped = 0
     for a in articles:
-        if Article.query.filter_by(guid=a["guid"]).first():
+        # AI tags from the aggregator; accept only well-formed values
+        score = a.get("ai_score")
+        score = score if isinstance(score, int) and not isinstance(score, bool) and 1 <= score <= 10 else None
+        southeast = a.get("southeast") if isinstance(a.get("southeast"), bool) else None
+
+        existing = Article.query.filter_by(guid=a["guid"]).first()
+        if existing:
+            # The aggregator re-sends recent articles each run: fill in AI tags missing from earlier pushes
+            if existing.ai_score is None and score is not None:
+                existing.ai_score = score
+            if existing.southeast is None and southeast is not None:
+                existing.southeast = southeast
             skipped += 1
             continue
 
@@ -229,10 +240,6 @@ def ingest():
                 pass
 
         rss_summary = (a.get("summary") or "").strip() or None
-        # AI tags from the aggregator; accept only well-formed values
-        score = a.get("ai_score")
-        score = score if isinstance(score, int) and not isinstance(score, bool) and 1 <= score <= 10 else None
-        southeast = a.get("southeast") if isinstance(a.get("southeast"), bool) else None
         db.session.add(Article(
             guid=a["guid"],
             title=a["title"],
@@ -477,23 +484,6 @@ def fetch_article_description(url: str) -> str:
     except Exception as e:
         log.error(f"fetch_desc: exception for {url} — {type(e).__name__}: {e}")
         return ""
-
-
-@bp.route("/api/articles/<int:article_id>/summarize", methods=["POST"])
-def summarize_article(article_id):
-    article = Article.query.get_or_404(article_id)
-
-    if article.ai_summary:
-        return jsonify({"summary": article.ai_summary, "cached": True})
-
-    description = fetch_article_description(article.url)
-
-    if not description:
-        return jsonify({"error": "No description found"}), 500
-
-    article.ai_summary = description
-    db.session.commit()
-    return jsonify({"summary": description, "cached": False})
 
 
 # ── Trigger aggregator refresh ───────────────────────────────────────────────

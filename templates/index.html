@@ -1372,37 +1372,6 @@
       if (e.target === document.getElementById("infoModal")) closeInfo();
     }
 
-    // ── Summarize ─────────────────────────────────────────────────────────────
-
-    async function summarizeArticle(id, btn) {
-      btn.disabled = true;
-      btn.textContent = "Fetching…";
-      try {
-        const res = await fetch(`/api/articles/${id}/summarize`, { method: "POST" });
-        const data = await res.json();
-        if (data.error) {
-          btn.textContent = data.error;
-          btn.disabled = true;
-          btn.style.color = "var(--gray)";
-          btn.style.borderColor = "var(--border)";
-          btn.style.cursor = "default";
-          return;
-        }
-        const toggle = document.createElement("button");
-        toggle.className = "summary-toggle";
-        toggle.textContent = "▼ Description";
-        toggle.onclick = () => toggleSummary(toggle);
-        const drawer = document.createElement("div");
-        drawer.className = "summary-drawer open";
-        drawer.textContent = data.summary;
-        btn.replaceWith(toggle);
-        toggle.insertAdjacentElement("afterend", drawer);
-      } catch (e) {
-        btn.textContent = "Failed — retry";
-        btn.disabled = false;
-      }
-    }
-
     function toggleSummary(btn) {
       const drawer = btn.nextElementSibling;
       if (!drawer) return;
