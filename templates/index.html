@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CITS Newsletter Curator</title>
+  <title>ESSP Newsletter Curator</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;500;700&family=Merriweather:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet">
   <style>
@@ -269,6 +269,15 @@
       padding-bottom: 5px;
       border-bottom: 1px solid var(--border);
     }
+    .sidebar-collapsible > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 6px; }
+    .sidebar-collapsible > summary::-webkit-details-marker { display: none; }
+    .sidebar-collapsible > summary::after { content: "▸"; margin-left: auto; font-size: 11px; color: #999; }
+    .sidebar-collapsible[open] > summary::after { content: "▾"; }
+    .sidebar-collapsible > summary:hover { color: var(--charcoal); }
+    .sidebar-collapsible > summary:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
+    .sidebar-count { color: #999; letter-spacing: 1px; }
+    .region-check { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 6px 12px; font-family: 'Oswald', sans-serif; font-size: 12px; color: #555; cursor: pointer; }
+    .region-check input { accent-color: var(--red); width: 14px; height: 14px; cursor: pointer; }
     .search-input {
       width: 100%;
       padding: 8px 12px;
@@ -430,6 +439,7 @@
       letter-spacing: 0.3px;
       margin-top: 1px;
     }
+    .article-date-inline { margin-left: 10px; font-size: 9.5px; letter-spacing: 0.5px; }
 
     body.compact .status-buttons {
       flex-direction: row;
@@ -823,14 +833,15 @@
         <div id="categoryFilters">
           <button class="filter-btn active" onclick="setFilter('category', '', this)">All</button>
         </div>
+        <label class="region-check"><input type="checkbox" id="southeastOnly" onchange="toggleSoutheast(this.checked)"> Southeast US only</label>
       </div>
       <div class="sidebar-divider"></div>
-      <div class="sidebar-section">
-        <div class="sidebar-label">Source</div>
+      <details class="sidebar-section sidebar-collapsible">
+        <summary class="sidebar-label">Source <span class="sidebar-count" id="sourceCount"></span></summary>
         <div id="sourceFilters">
           <button class="filter-btn active" onclick="setFilter('source', '', this)">All</button>
         </div>
-      </div>
+      </details>
       <div class="sidebar-divider"></div>
       <div class="sidebar-section">
         <div class="sidebar-label">Export Selected</div>
@@ -867,27 +878,27 @@
   <div class="modal-overlay" id="infoModal" onclick="closeInfoOnOverlay(event)">
     <div class="modal">
       <div class="modal-header">
-        <span class="modal-title">CITS Newsletter Curator — Guide</span>
+        <span class="modal-title">Newsletter Curator — Guide</span>
         <button class="modal-close" onclick="closeInfo()">✕</button>
       </div>
       <div class="modal-body">
 
-        <div class="modal-section-title">Overview</div>
-        <p class="info-para">The CITS Newsletter Curator is a weekly article triage tool for the CITS energy security newsletter. Articles are ingested automatically from the RSS aggregator every Friday at 10 AM ET and organized by category. Reviewers mark articles for inclusion, flag uncertainties, or dismiss irrelevant content before exporting a structured reference file for newsletter writing.</p>
+        <div class="modal-section-title">Where articles come from</div>
+        <p class="info-para">About 50 news, trade, think-tank and government feeds, plus Google News searches of major outlets and a few email newsletters. New articles arrive every Friday at 10 AM ET. Each category keeps its 40 newest articles, with no single source over 35%.</p>
 
         <div class="modal-section-title">Article statuses</div>
         <div class="shortcut-grid" style="margin-bottom: 12px;">
           <span class="shortcut-key" style="background:#fff8f8; border-color:var(--red); color:var(--red);">Selected</span>
-          <span class="shortcut-desc">Included in exports. Applied to articles that will be referenced during writing.</span>
+          <span class="shortcut-desc">Included in exports.</span>
           <span class="shortcut-key" style="background:#fffbf0; border-color:#e0a800; color:#e0a800;">Maybe</span>
-          <span class="shortcut-desc">Pending decision. The "Selected + Maybe" export can be used to make a final call at the end of the week.</span>
+          <span class="shortcut-desc">Undecided. The Selected + Maybe export helps make the final call.</span>
           <span class="shortcut-key" style="background:#f5f5f5; border-color:#909090; color:#909090;">Skip</span>
-          <span class="shortcut-desc">Not relevant. Article remains visible in the list but is dimmed and excluded from all exports.</span>
+          <span class="shortcut-desc">Not relevant. Dimmed and left out of exports.</span>
         </div>
-        <p class="info-para" style="font-size:11px; color:var(--gray);">Selecting an active status a second time returns the article to unreviewed.</p>
+        <p class="info-para" style="font-size:11px; color:var(--gray);">Click an article's current status again to return it to unreviewed.</p>
 
         <div class="modal-section-title">Triage mode</div>
-        <p class="info-para">Triage mode condenses the article list to title and source only, with status controls moved inline. A progress bar tracks reviewed articles against the total. On by default; toggle it with the <strong>⊟ Triage</strong> button above the article list or the <strong>C</strong> keyboard shortcut. Your choice is remembered in this browser.</p>
+        <p class="info-para">On by default: one line per article with its source and publish date, status buttons inline, and a progress bar. Toggle it with <strong>⊟ Triage</strong> or <strong>C</strong>; this browser remembers your choice.</p>
 
         <div class="modal-section-title">Keyboard shortcuts</div>
         <div class="shortcut-grid">
@@ -904,18 +915,21 @@
           <span class="shortcut-key">C</span>
           <span class="shortcut-desc">Toggle triage mode</span>
           <span class="shortcut-key">?</span>
-          <span class="shortcut-desc">Open / close this panel</span>
+          <span class="shortcut-desc">Open / close this guide</span>
         </div>
-        <p class="info-para" style="color:var(--gray); font-size:11px; margin-top: 10px;">Shortcuts are inactive when the search box or week selector is focused.</p>
+        <p class="info-para" style="color:var(--gray); font-size:11px; margin-top: 10px;">Shortcuts pause while you type in the search box.</p>
+
+        <div class="modal-section-title">Finding articles</div>
+        <p class="info-para">The left sidebar searches titles, sorts by category, source, date or AI score, and filters by status, category or source. The source list starts collapsed. <strong>Southeast US only</strong> shows articles the AI judged substantially about the Southeast, in any category.</p>
+
+        <div class="modal-section-title">Refresh and past weeks</div>
+        <p class="info-para"><strong>↻ Refresh</strong> pulls new articles now instead of waiting for Friday; they appear within a few minutes. The date beside it shows when this week was last refreshed. Earlier weeks are in the Archive, linked from the Home page.</p>
 
         <div class="modal-section-title">Export</div>
-        <p class="info-para"><strong>Text — Selected</strong> produces a plain-text file organized by category, suitable for use as a writing reference. <strong>CSV — Selected</strong> includes all metadata fields and any cached article descriptions. <strong>Copy Links — Selected</strong> copies each selected article's title and link to the clipboard. Export options are available in the left sidebar.</p>
+        <p class="info-para">At the bottom of the sidebar: a text file grouped by category (Selected, or Selected + Maybe), a CSV with every field, or <strong>Copy Links</strong> for each selected article's title and link.</p>
 
-        <div class="modal-section-title">Refresh</div>
-        <p class="info-para">The <strong>↻ Refresh</strong> button triggers a manual pull from the aggregator outside the automatic Friday schedule. Ingested articles typically appear within two minutes. The refresh indicator in the top-right of the header shows the time of the last completed refresh and a log of recent refresh activity.</p>
-
-        <div class="modal-section-title">Article descriptions</div>
-        <p class="info-para">The <strong>↓ Pull description</strong> button fetches the publisher's meta description directly from the article page. No AI is involved — the description is the same text search engines and social platforms display for the article. Once fetched, descriptions are cached and displayed as a collapsible <strong>▶ Description</strong> toggle on all subsequent loads.</p>
+        <div class="modal-section-title">Descriptions</div>
+        <p class="info-para">When a source's feed includes a summary, it appears under <strong>▶ Description</strong>. Google News and email-newsletter items have none.</p>
 
         <button class="header-btn admin-btn" onclick="openAdmin()">Admin</button>
 
@@ -927,7 +941,7 @@
 
   <script>
     let currentWeek = "{{ selected_week }}";
-    let filters = { category: "", source: "", status: "" };
+    let filters = { category: "", source: "", status: "", southeast: false };
     let debounceTimer = null;
     let collapsedGroups = new Set();
     let focusedIndex = -1;
@@ -982,6 +996,7 @@
         btn.onclick = () => setFilter("source", s, btn);
         srcDiv.appendChild(btn);
       });
+      document.getElementById("sourceCount").textContent = `(${data.sources.length})`;
     }
 
     function setFilter(type, value, btn) {
@@ -992,12 +1007,19 @@
       loadArticles();
     }
 
+    function toggleSoutheast(on) {
+      filters.southeast = on;
+      updateFilterBackBar();
+      loadArticles();
+    }
+
     function updateFilterBackBar() {
       const bar   = document.getElementById("filterBackBar");
       const label = document.getElementById("filterBackLabel");
       const active = [];
       if (filters.source)   active.push(`Source: ${filters.source}`);
       if (filters.category) active.push(`Category: ${filters.category}`);
+      if (filters.southeast) active.push("Southeast US");
       if (active.length) {
         bar.classList.add("visible");
         label.textContent = active.join(" · ");
@@ -1010,6 +1032,8 @@
     function clearAllFilters() {
       filters.source   = "";
       filters.category = "";
+      filters.southeast = false;
+      document.getElementById("southeastOnly").checked = false;
       // Reset sidebar buttons to "All"
       document.querySelectorAll("#categoryFilters .filter-btn").forEach((b, i) => b.classList.toggle("active", i === 0));
       document.querySelectorAll("#sourceFilters .filter-btn").forEach((b, i) => b.classList.toggle("active", i === 0));
@@ -1032,6 +1056,7 @@
         week: currentWeek, category: filters.category,
         source: filters.source, status: filters.status, search, sort,
       });
+      if (filters.southeast) params.set("southeast", "1");
 
       const list = document.getElementById("articleList");
       // preserve progress bar and hint when clearing
@@ -1147,7 +1172,7 @@
 
     function renderArticle(a) {
       const statusClass = a.status !== "unreviewed" ? `status-${a.status}` : "";
-      const pub = a.published_at ? new Date(a.published_at).toLocaleDateString("en-US", {month:"short", day:"numeric"}) : "";
+      const pub = a.published_at ? parseUtc(a.published_at).toLocaleDateString("en-US", {month:"short", day:"numeric"}) : "";
       const scoreClass = a.ai_score >= 7 ? "high" : a.ai_score >= 5 ? "mid" : "low";
       const score = a.ai_score ? `<span class="score-badge ${scoreClass}">${a.ai_score}</span>` : "";
       const note  = a.curator_note ? `<div class="article-note">${escHtml(a.curator_note)}</div>` : "";
@@ -1159,7 +1184,7 @@
         <div class="article-item ${statusClass}" id="article-${a.id}" tabindex="-1">
           <div class="article-content">
             <a href="${a.url}" target="_blank" class="article-title">${escHtml(a.title)}</a>
-            <span class="article-source-inline">${escHtml(a.feed_name)}</span>
+            <span class="article-source-inline">${escHtml(a.feed_name)}${pub ? `<span class="article-date-inline">${pub}</span>` : ""}</span>
             <div class="article-meta">
               <span class="article-source">${escHtml(a.feed_name)}</span>
               ${pub ? `<span>${pub}</span>` : ""}

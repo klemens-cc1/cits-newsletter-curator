@@ -103,6 +103,7 @@ def _run_migrations(db):
         "ALTER TABLE research_articles ADD COLUMN IF NOT EXISTS source_domain VARCHAR(256)",
         "CREATE TABLE IF NOT EXISTS feedback (id SERIAL PRIMARY KEY, message TEXT NOT NULL, submitted_at TIMESTAMPTZ DEFAULT NOW())",
         "ALTER TABLE research_sessions ADD COLUMN IF NOT EXISTS search_params TEXT",
+        "ALTER TABLE articles ADD COLUMN IF NOT EXISTS southeast BOOLEAN",
     ]
     for sql in migrations:
         try:

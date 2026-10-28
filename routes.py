@@ -138,7 +138,7 @@ def admin_feedback():
     )
     return f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500&family=Merriweather:wght@300;400&display=swap" rel="stylesheet">
-<title>Feedback — CITS Admin</title>
+<title>Feedback — ESSP Admin</title>
 <style>
   body{{font-family:'Merriweather',serif;background:#efefef;color:#252525;padding:40px 48px;}}
   h1{{font-family:'Oswald',sans-serif;font-size:22px;letter-spacing:3px;text-transform:uppercase;margin-bottom:6px;}}
@@ -162,8 +162,11 @@ def get_articles():
     status = request.args.get("status", "")
     search = request.args.get("search", "").strip()
     sort   = request.args.get("sort", "category")
+    southeast_only = request.args.get("southeast") == "1"
 
     q = Article.query.filter_by(week_key=week)
+    if southeast_only:
+        q = q.filter_by(southeast=True)
 
     if cat:
         q = q.filter_by(category=cat)
@@ -226,6 +229,10 @@ def ingest():
                 pass
 
         rss_summary = (a.get("summary") or "").strip() or None
+        # AI tags from the aggregator; accept only well-formed values
+        score = a.get("ai_score")
+        score = score if isinstance(score, int) and not isinstance(score, bool) and 1 <= score <= 10 else None
+        southeast = a.get("southeast") if isinstance(a.get("southeast"), bool) else None
         db.session.add(Article(
             guid=a["guid"],
             title=a["title"],
@@ -235,6 +242,8 @@ def ingest():
             published_at=pub,
             week_key=week_key,
             ai_summary=rss_summary,
+            ai_score=score,
+            southeast=southeast,
         ))
         added += 1
 
@@ -345,7 +354,7 @@ def export():
     label = "-".join(statuses)
 
     if fmt == "text":
-        lines = [f"CITS Newsletter — {week}", "=" * 48, ""]
+        lines = [f"ESSP Newsletter — {week}", "=" * 48, ""]
         current_cat = None
         for a in articles:
             if a.category != current_cat:

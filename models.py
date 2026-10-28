@@ -22,6 +22,7 @@ class Article(db.Model):
     # AI fields (populated lazily)
     ai_score     = db.Column(db.Integer, nullable=True)
     ai_summary   = db.Column(db.Text, nullable=True)
+    southeast    = db.Column(db.Boolean, nullable=True)   # AI: substantially about the US Southeast
 
     def to_dict(self):
         return {
@@ -38,6 +39,7 @@ class Article(db.Model):
             "curator_note": self.curator_note,
             "ai_score":     self.ai_score,
             "ai_summary":   self.ai_summary,
+            "southeast":    self.southeast,
         }
 
 
