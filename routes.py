@@ -73,8 +73,19 @@ def index():
         .all()
     )
     week_keys = [w[0] for w in weeks]
-    selected_week = request.args.get("week", week_keys[0] if week_keys else current_week_key())
-    return render_template("index.html", weeks=week_keys, selected_week=selected_week)
+    latest_week = week_keys[0] if week_keys else current_week_key()
+    selected_week = request.args.get("week", latest_week)
+    last_log = (
+        RefreshLog.query.filter_by(week_key=selected_week)
+        .order_by(RefreshLog.pushed_at.desc())
+        .first()
+    )
+    return render_template(
+        "index.html",
+        selected_week=selected_week,
+        latest_week=latest_week,
+        last_refreshed=last_log.pushed_at.isoformat() if last_log and last_log.pushed_at else "",
+    )
 
 
 @bp.route("/history")

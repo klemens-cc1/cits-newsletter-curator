@@ -99,19 +99,6 @@
     .header-btn:disabled { opacity: 0.4; cursor: wait; }
     .admin-btn { margin-top: 24px; }
     .admin-btn:hover { color: var(--red); border-color: var(--red); }
-    .header-btn.active { color: var(--white); border-color: var(--red); background: rgba(186,12,47,0.18); }
-    .week-selector {
-      font-family: 'Oswald', sans-serif;
-      font-size: 11px;
-      letter-spacing: 1px;
-      background: #2e2e2e;
-      border: 1px solid #444;
-      color: #ccc;
-      padding: 5px 11px;
-      cursor: pointer;
-      outline: none;
-    }
-    .week-selector option { background: var(--charcoal); }
 
     /* ── Refresh status indicator ── */
     .refresh-indicator { position: relative; margin-left: auto; }
@@ -205,6 +192,30 @@
     .stat-item:last-child { border-right: none; margin-right: 0; }
     .stat-item span { color: var(--charcoal); font-size: 17px; font-weight: 500; display: block; line-height: 1.1; margin-bottom: 1px; }
     .stat-item.selected span { color: var(--red); }
+
+    /* ── Curator controls (right side of the stats row) ── */
+    .stats-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .week-date { font-family: 'Merriweather', serif; font-size: 12px; color: var(--gray); margin-right: 6px; }
+    .week-latest { font-family: 'Oswald', sans-serif; font-size: 11px; letter-spacing: 1px; color: var(--red); margin-right: 6px; }
+    .action-btn {
+      font-family: 'Oswald', sans-serif;
+      font-size: 11px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      padding: 6px 12px;
+      border: 1px solid;
+      background: var(--white);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .action-btn:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
+    .action-btn:disabled { opacity: 0.5; cursor: wait; }
+    .action-primary { background: var(--red); border-color: var(--red); color: var(--white); }
+    .action-primary:hover:not(:disabled) { background: #960a26; border-color: #960a26; }
+    .action-toggle { border-color: var(--red); color: var(--red); }
+    .action-toggle:hover, .action-toggle[aria-pressed="true"] { background: rgba(186,12,47,0.08); }
+    .action-quiet { border-color: var(--border); color: var(--gray); }
+    .action-quiet:hover { border-color: var(--gray); color: var(--charcoal); }
 
     /* ── Layout ── */
     .layout { display: flex; height: calc(100vh - 64px - 45px); }
@@ -749,18 +760,6 @@
       <a href="/" class="nav-link">Home</a>
       <a href="/newsletter" class="nav-link active">Newsletter</a>
       <a href="/research" class="nav-link">Research</a>
-      <a href="/history" class="nav-link">History</a>
-      <button class="header-btn" id="refreshBtn" onclick="triggerRefresh()">↻ Refresh</button>
-      <button class="header-btn" id="compactBtn" onclick="toggleCompact()">⊟ Triage</button>
-      <button class="header-btn" onclick="openInfo()">? Info</button>
-      <select class="week-selector" id="weekSelector" onchange="changeWeek(this.value)">
-        {% for w in weeks %}
-        <option value="{{ w }}" {% if w == selected_week %}selected{% endif %}>{{ w }}</option>
-        {% endfor %}
-        {% if not weeks %}
-        <option value="{{ selected_week }}">{{ selected_week }}</option>
-        {% endif %}
-      </select>
     </div>
     <div class="refresh-indicator" id="refreshIndicator">
       <button class="refresh-pill" id="refreshPill" onclick="toggleRefreshDropdown()">
@@ -780,6 +779,13 @@
     <div class="stat-item selected">Selected <span id="statSelected">—</span></div>
     <div class="stat-item">Maybe <span id="statMaybe">—</span></div>
     <div class="stat-item">Skip <span id="statSkip">—</span></div>
+    <div class="stats-actions">
+      <span class="week-date" id="weekDate"></span>
+      {% if selected_week != latest_week %}<a class="week-latest" href="/newsletter">Back to latest week</a>{% endif %}
+      <button class="action-btn action-primary" id="refreshBtn" onclick="triggerRefresh()">↻ Refresh</button>
+      <button class="action-btn action-toggle" id="compactBtn" onclick="toggleCompact()" aria-pressed="false">⊟ Triage</button>
+      <button class="action-btn action-quiet" onclick="openInfo()">? Info</button>
+    </div>
   </div>
 
   <div class="layout">
@@ -881,7 +887,7 @@
         <p class="info-para" style="font-size:11px; color:var(--gray);">Selecting an active status a second time returns the article to unreviewed.</p>
 
         <div class="modal-section-title">Triage mode</div>
-        <p class="info-para">Triage mode condenses the article list to title and source only, with status controls moved inline. A progress bar tracks reviewed articles against the total. Activated via the <strong>⊟ Triage</strong> button in the header or the <strong>C</strong> keyboard shortcut.</p>
+        <p class="info-para">Triage mode condenses the article list to title and source only, with status controls moved inline. A progress bar tracks reviewed articles against the total. On by default; toggle it with the <strong>⊟ Triage</strong> button above the article list or the <strong>C</strong> keyboard shortcut. Your choice is remembered in this browser.</p>
 
         <div class="modal-section-title">Keyboard shortcuts</div>
         <div class="shortcut-grid">
@@ -926,25 +932,29 @@
     let collapsedGroups = new Set();
     let focusedIndex = -1;
     let articleIds = [];
-    let isCompact = false;
+    let isCompact = true;
+    try { isCompact = localStorage.getItem("triageMode") !== "off"; } catch (e) {}
 
     window.addEventListener("DOMContentLoaded", () => {
+      applyCompact();
+      showRefreshDate({{ last_refreshed|tojson }});
       loadFilters();
       loadArticles();
       loadStats();
       loadRefreshStatus();
     });
 
-    // ── Week ─────────────────────────────────────────────────────────────────
+    // ── Refresh date for the week being viewed ───────────────────────────────
 
-    function changeWeek(week) {
-      currentWeek = week;
-      filters = { category: "", source: "", status: "" };
-      collapsedGroups.clear();
-      focusedIndex = -1;
-      loadFilters();
-      loadArticles();
-      loadStats();
+    // Server timestamps are UTC without a zone marker; without one, browsers read them as local time
+    function parseUtc(iso) {
+      return new Date(/([zZ]|[+-]\d\d:?\d\d)$/.test(iso) ? iso : iso + "Z");
+    }
+
+    function showRefreshDate(iso) {
+      document.getElementById("weekDate").textContent = iso
+        ? "Refreshed " + parseUtc(iso).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+        : "Not refreshed yet";
     }
 
     // ── Filters ───────────────────────────────────────────────────────────────
@@ -1227,9 +1237,14 @@
 
     function toggleCompact() {
       isCompact = !isCompact;
+      try { localStorage.setItem("triageMode", isCompact ? "on" : "off"); } catch (e) {}
+      applyCompact();
+    }
+
+    function applyCompact() {
       document.body.classList.toggle("compact", isCompact);
       const btn = document.getElementById("compactBtn");
-      btn.classList.toggle("active", isCompact);
+      btn.setAttribute("aria-pressed", String(isCompact));
       btn.textContent = isCompact ? "⊟ Triage ✓" : "⊟ Triage";
       if (isCompact) updateTriageProgress();
     }
@@ -1384,6 +1399,8 @@
         const res = await fetch("/api/refresh-log?limit=5");
         const logs = await res.json();
         renderRefreshLog(logs);
+        const thisWeek = logs.find(l => l.week_key === currentWeek);
+        if (thisWeek) showRefreshDate(thisWeek.pushed_at);
         if (logs.length > 0) {
           refreshBaseline = logs[0].pushed_at;
           setPillIdle(logs[0].pushed_at);
@@ -1466,7 +1483,7 @@
         return;
       }
       list.innerHTML = logs.map(log => {
-        const t = new Date(log.pushed_at);
+        const t = parseUtc(log.pushed_at);
         const dateStr = t.toLocaleDateString("en-US", { month: "short", day: "numeric" });
         const timeStr = t.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
         const trigger = log.triggered_by === "manual" ? "Manual" : "Auto";
@@ -1497,7 +1514,7 @@
 
     function timeAgo(isoString) {
       if (!isoString) return "—";
-      const diff = Math.floor((Date.now() - new Date(isoString).getTime()) / 1000);
+      const diff = Math.floor((Date.now() - parseUtc(isoString).getTime()) / 1000);
       if (diff < 60) return "just now";
       if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
       if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
@@ -1555,5 +1572,6 @@
       return String(str).replace(/'/g, "\\'");
     }
   </script>
+<script src="{{ url_for('static', filename='mobile-notice.js') }}"></script>
 </body>
 </html>

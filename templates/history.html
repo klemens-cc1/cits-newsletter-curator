@@ -329,12 +329,11 @@
   <header>
     <span title="Energy Security Studies Program" style="font-family:'Oswald',sans-serif;font-weight:700;font-size:28px;line-height:1;letter-spacing:0.04em;color:#e4002b;flex-shrink:0;">ESSP</span>
     <div class="header-divider"></div>
-    <div class="header-sub">Newsletter Curator</div>
+    <div class="header-sub">Archive</div>
     <div class="header-divider"></div>
     <a href="/" class="nav-link">Home</a>
     <a href="/newsletter" class="nav-link">Newsletter</a>
     <a href="/research" class="nav-link">Research</a>
-    <a href="/history" class="nav-link active">History</a>
   </header>
 
   <div class="page">
@@ -413,7 +412,7 @@
           : "—";
 
         return `
-          <a class="week-card" href="/?week=${w.week_key}">
+          <a class="week-card" href="/newsletter?week=${w.week_key}">
             <div class="week-card-key">${w.week_key}</div>
             <div class="week-card-stats">
               <div class="week-stat">
@@ -456,7 +455,7 @@
         return `
           <tr>
             <td>${time}</td>
-            <td class="week-link"><a href="/?week=${l.week_key}">${l.week_key}</a></td>
+            <td class="week-link"><a href="/newsletter?week=${l.week_key}">${l.week_key}</a></td>
             <td><span class="trigger-badge ${badgeClass}">${l.triggered_by}</span></td>
             <td class="added">+${l.articles_added}</td>
             <td class="skipped">${l.articles_skipped} skipped</td>
@@ -511,5 +510,6 @@
     }
   </script>
 
+<script src="{{ url_for('static', filename='mobile-notice.js') }}"></script>
 </body>
 </html>

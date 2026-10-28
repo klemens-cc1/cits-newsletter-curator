@@ -60,6 +60,10 @@
       white-space: nowrap;
     }
     .header-divider { width: 1px; height: 24px; background: #3a3a3a; flex-shrink: 0; }
+    .header-sub { font-family: 'Merriweather', serif; font-size: 14px; color: #ccc; font-weight: 300; }
+    /* Sits just under the stats strip (which has a 64px bottom margin), aligned below "Last feed refresh" */
+    .archive-link { margin: -48px 0 64px; text-align: right; font-family: 'Merriweather', serif; font-size: 13px; color: var(--gray); }
+    .archive-link a { color: var(--red); }
     .header-spacer { flex: 1; }
     .nav-link {
       font-family: 'Oswald', sans-serif;
@@ -306,7 +310,6 @@
   <a href="/" class="nav-link active">Home</a>
   <a href="/newsletter" class="nav-link">Newsletter</a>
   <a href="/research" class="nav-link">Research</a>
-  <a href="/history" class="nav-link">History</a>
 </header>
 
 <div class="page">
@@ -355,6 +358,8 @@
       <div class="stat-label">Last Feed Refresh</div>
     </div>
   </div>
+
+  <p class="archive-link">Looking for an earlier week? <a href="/history">Open the archive</a></p>
 
   <!-- Feedback -->
   <div class="feedback-section">
@@ -435,5 +440,6 @@
     .finally(() => { btn.disabled = false; });
   }
 </script>
+<script src="{{ url_for('static', filename='mobile-notice.js') }}"></script>
 </body>
 </html>
