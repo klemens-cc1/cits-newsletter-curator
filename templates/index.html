@@ -466,49 +466,6 @@
     body.compact .status-btn.active-maybe    { background: rgba(224,168,0,0.1); color: #b8860b; border-color: transparent; }
     body.compact .status-btn.active-skip     { background: rgba(144,144,144,0.1); color: var(--gray); border-color: transparent; }
 
-    /* ── Triage progress bar ── */
-    .triage-progress {
-      display: none;
-      background: var(--charcoal);
-      padding: 7px 28px;
-      align-items: center;
-      gap: 14px;
-      border-bottom: 1px solid #333;
-      position: sticky;
-      top: 0;
-      z-index: 9;
-    }
-    body.compact .triage-progress { display: flex; }
-    .triage-progress-label {
-      font-family: 'Oswald', sans-serif;
-      font-size: 10px;
-      letter-spacing: 1.5px;
-      text-transform: uppercase;
-      color: var(--gray);
-      white-space: nowrap;
-    }
-    .triage-progress-track {
-      flex: 1;
-      height: 4px;
-      background: #444;
-      border-radius: 2px;
-      overflow: hidden;
-    }
-    .triage-progress-fill {
-      height: 100%;
-      background: var(--red);
-      border-radius: 2px;
-      transition: width 0.3s ease;
-      width: 0%;
-    }
-    .triage-progress-count {
-      font-family: 'Oswald', sans-serif;
-      font-size: 10px;
-      color: var(--gray);
-      white-space: nowrap;
-    }
-    .triage-progress-count span { color: var(--red); font-weight: 500; }
-
     /* ── Triage hint bar ── */
     .triage-hint {
       display: none;
@@ -818,6 +775,14 @@
       </div>
       <div class="sidebar-divider"></div>
       <div class="sidebar-section">
+        <div class="sidebar-label">Category</div>
+        <div id="categoryFilters">
+          <button class="filter-btn active" onclick="setFilter('category', '', this)">All</button>
+        </div>
+        <label class="region-check"><input type="checkbox" id="southeastOnly" onchange="toggleSoutheast(this.checked)"> Southeast US only</label>
+      </div>
+      <div class="sidebar-divider"></div>
+      <div class="sidebar-section">
         <div class="sidebar-label">Status</div>
         <div class="filter-group">
           <button class="filter-btn active" onclick="setFilter('status', '', this)">All <span class="filter-count" id="fcAll"></span></button>
@@ -826,14 +791,6 @@
           <button class="filter-btn" onclick="setFilter('status', 'maybe', this)">Maybe <span class="filter-count" id="fcMaybe"></span></button>
           <button class="filter-btn" onclick="setFilter('status', 'skip', this)">Skip <span class="filter-count" id="fcSkip"></span></button>
         </div>
-      </div>
-      <div class="sidebar-divider"></div>
-      <div class="sidebar-section">
-        <div class="sidebar-label">Category</div>
-        <div id="categoryFilters">
-          <button class="filter-btn active" onclick="setFilter('category', '', this)">All</button>
-        </div>
-        <label class="region-check"><input type="checkbox" id="southeastOnly" onchange="toggleSoutheast(this.checked)"> Southeast US only</label>
       </div>
       <div class="sidebar-divider"></div>
       <details class="sidebar-section sidebar-collapsible">
@@ -858,13 +815,6 @@
         <span id="filterBackLabel"></span>
       </div>
       <main class="article-list" id="articleList">
-        <div class="triage-progress" id="triageProgress">
-          <span class="triage-progress-label">Progress</span>
-          <div class="triage-progress-track">
-            <div class="triage-progress-fill" id="triageProgressFill"></div>
-          </div>
-          <span class="triage-progress-count"><span id="triageReviewed">0</span> / <span id="triageTotal">0</span> reviewed</span>
-        </div>
         <div class="loading">Loading articles…</div>
         <div class="triage-hint">
           <kbd>↑↓</kbd> navigate &nbsp;·&nbsp; <kbd>S</kbd> select &nbsp;·&nbsp; <kbd>M</kbd> maybe &nbsp;·&nbsp; <kbd>X</kbd> skip &nbsp;·&nbsp; <kbd>Enter</kbd> open link &nbsp;·&nbsp; <kbd>C</kbd> exit triage
@@ -898,7 +848,7 @@
         <p class="info-para" style="font-size:11px; color:var(--gray);">Click an article's current status again to return it to unreviewed.</p>
 
         <div class="modal-section-title">Triage mode</div>
-        <p class="info-para">On by default: one line per article with its source and publish date, status buttons inline, and a progress bar. Toggle it with <strong>⊟ Triage</strong> or <strong>C</strong>; this browser remembers your choice.</p>
+        <p class="info-para">On by default: one line per article with its source and publish date, and status buttons inline. Toggle it with <strong>⊟ Triage</strong> or <strong>C</strong>; this browser remembers your choice.</p>
 
         <div class="modal-section-title">Keyboard shortcuts</div>
         <div class="shortcut-grid">
@@ -1059,11 +1009,9 @@
       if (filters.southeast) params.set("southeast", "1");
 
       const list = document.getElementById("articleList");
-      // preserve progress bar and hint when clearing
-      const progress = document.getElementById("triageProgress");
+      // preserve hint when clearing
       const hint = list.querySelector(".triage-hint");
       list.innerHTML = "";
-      list.appendChild(progress);
       list.insertAdjacentHTML("beforeend", `<div class="loading">Loading…</div>`);
       if (hint) list.appendChild(hint);
 
@@ -1073,9 +1021,8 @@
       const res = await fetch(`/api/articles?${params}`);
       const articles = await res.json();
 
-      // clear loading msg but keep progress + hint
+      // clear loading msg but keep hint
       list.innerHTML = "";
-      list.appendChild(progress);
 
       if (!articles.length) {
         list.insertAdjacentHTML("beforeend", `<div class="empty">No articles found</div>`);
@@ -1128,8 +1075,6 @@
           if (chevron) chevron.classList.add("collapsed");
         }
       });
-
-      if (isCompact) updateTriageProgress();
     }
 
     function renderGroup(name, items, collapsible) {
@@ -1220,7 +1165,6 @@
       }
       loadStats();
       showToast(currentStatus === "unreviewed" ? "Cleared" : `Marked as ${currentStatus}`);
-      if (isCompact) updateTriageProgress();
     }
 
     // ── Stats ─────────────────────────────────────────────────────────────────
@@ -1271,18 +1215,6 @@
       const btn = document.getElementById("compactBtn");
       btn.setAttribute("aria-pressed", String(isCompact));
       btn.textContent = isCompact ? "⊟ Triage ✓" : "⊟ Triage";
-      if (isCompact) updateTriageProgress();
-    }
-
-    function updateTriageProgress() {
-      const total = articleIds.length;
-      const reviewed = document.querySelectorAll(
-        ".article-item.status-selected, .article-item.status-maybe, .article-item.status-skip"
-      ).length;
-      document.getElementById("triageTotal").textContent = total;
-      document.getElementById("triageReviewed").textContent = reviewed;
-      const pct = total > 0 ? Math.round((reviewed / total) * 100) : 0;
-      document.getElementById("triageProgressFill").style.width = pct + "%";
     }
 
     // ── Keyboard navigation ───────────────────────────────────────────────────
