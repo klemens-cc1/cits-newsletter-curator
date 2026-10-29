@@ -104,6 +104,7 @@ def _run_migrations(db):
         "CREATE TABLE IF NOT EXISTS feedback (id SERIAL PRIMARY KEY, message TEXT NOT NULL, submitted_at TIMESTAMPTZ DEFAULT NOW())",
         "ALTER TABLE research_sessions ADD COLUMN IF NOT EXISTS search_params TEXT",
         "ALTER TABLE articles ADD COLUMN IF NOT EXISTS southeast BOOLEAN",
+        "ALTER TABLE articles ALTER COLUMN guid TYPE TEXT",  # Google News guids exceed 512 chars
     ]
     for sql in migrations:
         try:

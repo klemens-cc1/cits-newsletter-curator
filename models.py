@@ -6,7 +6,7 @@ class Article(db.Model):
     __tablename__ = "articles"
 
     id           = db.Column(db.Integer, primary_key=True)
-    guid         = db.Column(db.String(512), unique=True, nullable=False)
+    guid         = db.Column(db.Text, unique=True, nullable=False)
     title        = db.Column(db.Text, nullable=False)
     url          = db.Column(db.Text, nullable=False)
     feed_name    = db.Column(db.String(256), nullable=False)
