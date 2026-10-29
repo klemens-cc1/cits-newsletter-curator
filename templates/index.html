@@ -1081,7 +1081,7 @@
       const isCollapsed = collapsedGroups.has(name);
       const chevron = collapsible
         ? `<span class="category-chevron ${isCollapsed ? 'collapsed' : ''}">▼</span>` : "";
-      const clickHandler = collapsible ? `onclick="toggleGroup(this, '${escAttr(name)}')"` : "";
+      const clickHandler = collapsible ? `onclick="toggleGroup(this)"` : "";
       return `
         <div class="category-group">
           <div class="category-header" ${clickHandler}>
@@ -1090,14 +1090,15 @@
             <span class="category-count">${items.length} articles</span>
             ${chevron}
           </div>
-          <div class="category-articles" data-group="${escAttr(name)}">
+          <div class="category-articles" data-group="${escHtml(name)}">
             ${items.map(a => renderArticle(a)).join("")}
           </div>
         </div>`;
     }
 
-    function toggleGroup(headerEl, groupName) {
+    function toggleGroup(headerEl) {
       const articlesEl = headerEl.nextElementSibling;
+      const groupName = articlesEl.dataset.group;
       const chevron = headerEl.querySelector(".category-chevron");
       const isCollapsed = articlesEl.classList.contains("collapsed");
       if (isCollapsed) {
@@ -1116,7 +1117,7 @@
     }
 
     function renderArticle(a) {
-      const statusClass = a.status !== "unreviewed" ? `status-${a.status}` : "";
+      const statusClass = a.status !== "unreviewed" ? `status-${escHtml(a.status)}` : "";
       const pub = a.published_at ? parseUtc(a.published_at).toLocaleDateString("en-US", {month:"short", day:"numeric"}) : "";
       const scoreClass = a.ai_score >= 7 ? "high" : a.ai_score >= 5 ? "mid" : "low";
       const score = a.ai_score ? `<span class="score-badge ${scoreClass}">${a.ai_score}</span>` : "";
@@ -1128,7 +1129,7 @@
       return `
         <div class="article-item ${statusClass}" id="article-${a.id}" tabindex="-1">
           <div class="article-content">
-            <a href="${a.url}" target="_blank" class="article-title">${escHtml(a.title)}</a>
+            <a href="${escHtml(a.url)}" target="_blank" rel="noopener" class="article-title">${escHtml(a.title)}</a>
             <span class="article-source-inline">${escHtml(a.feed_name)}${pub ? `<span class="article-date-inline">${pub}</span>` : ""}</span>
             <div class="article-meta">
               <span class="article-source">${escHtml(a.feed_name)}</span>
@@ -1491,11 +1492,7 @@
     }
 
     function escHtml(str) {
-      return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-    }
-
-    function escAttr(str) {
-      return String(str).replace(/'/g, "\\'");
+      return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
     }
   </script>
 <script src="{{ url_for('static', filename='mobile-notice.js') }}"></script>

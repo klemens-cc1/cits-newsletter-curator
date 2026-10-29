@@ -189,11 +189,16 @@ def get_articles():
     return jsonify([a.to_dict() for a in q.all()])
 
 
+CURATION_STATUSES = {"unreviewed", "selected", "maybe", "skip"}
+
+
 @bp.route("/api/articles/<int:article_id>", methods=["PATCH"])
 def update_article(article_id):
     article = Article.query.get_or_404(article_id)
-    data = request.get_json()
+    data = request.get_json() or {}
     if "status" in data:
+        if data["status"] not in CURATION_STATUSES:  # rendered into HTML: never free text
+            return jsonify({"error": "invalid status"}), 400
         article.status = data["status"]
     if "curator_note" in data:
         article.curator_note = data["curator_note"]
@@ -224,10 +229,10 @@ def ingest():
 
         existing = Article.query.filter_by(guid=a["guid"]).first()
         if existing:
-            # The aggregator re-sends recent articles each run: fill in AI tags missing from earlier pushes
-            if existing.ai_score is None and score is not None:
+            # The aggregator re-sends and re-tags recent articles each run: keep the latest AI tags
+            if score is not None:
                 existing.ai_score = score
-            if existing.southeast is None and southeast is not None:
+            if southeast is not None:
                 existing.southeast = southeast
             skipped += 1
             continue
@@ -243,7 +248,8 @@ def ingest():
         db.session.add(Article(
             guid=a["guid"],
             title=a["title"],
-            url=a["url"],
+            # Feed content is untrusted: only web links, never javascript:/data: URLs
+            url=a["url"] if str(a.get("url", "")).lower().startswith(("https://", "http://")) else "",
             feed_name=a["feed_name"],
             category=a.get("category", "General"),
             published_at=pub,
@@ -938,6 +944,8 @@ def update_research_article(article_id):
     article = ResearchArticle.query.get_or_404(article_id)
     data = request.get_json() or {}
     if "status" in data:
+        if data["status"] not in CURATION_STATUSES:
+            return jsonify({"error": "invalid status"}), 400
         article.status = data["status"]
     if "curator_note" in data:
         article.curator_note = data["curator_note"]
